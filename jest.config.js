@@ -14,11 +14,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testMatch: ['<rootDir>/__tests__/**/*.test.{ts,tsx}'],
-  collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    '!src/**/index.ts',
-    '!src/theme/unistyles.ts',
-  ],
+  collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/index.ts', '!src/theme/unistyles.ts'],
   coverageThreshold: {
     global: {
       branches: 70,

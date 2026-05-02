@@ -88,7 +88,8 @@ jest.mock('react-native-unistyles', () => {
       // Handle BOTH the function form (unistyles) and the plain-object
       // form (RN core) — the function form is what our components use.
       create: (input: unknown) => {
-        const styles = typeof input === 'function' ? (input as (t: unknown) => unknown)(stubTheme) : input;
+        const styles =
+          typeof input === 'function' ? (input as (t: unknown) => unknown)(stubTheme) : input;
         return RN.StyleSheet.create(styles);
       },
       configure: jest.fn(),
