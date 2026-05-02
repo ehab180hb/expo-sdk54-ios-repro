@@ -111,7 +111,19 @@ jobs:
         run: |
           cd ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
-          /usr/bin/codesign --force --sign - --deep "$APP"
+          # Some Pod XCFramework structures choke codesign --deep
+          # ("bundle format unrecognized"). Sign frameworks one-by-one
+          # so any unsignable one is skipped instead of aborting the
+          # whole batch — then sign the top-level .app without --deep.
+          if [ -d "$APP/Frameworks" ]; then
+            for fw in "$APP/Frameworks"/*; do
+              [ -e "$fw" ] || continue
+              /usr/bin/codesign --force --sign - "$fw" \
+                || echo "::warning::skipped codesign for $fw"
+            done
+          fi
+          /usr/bin/codesign --force --sign - "$APP"
+          /usr/bin/codesign --verify --verbose=2 "$APP" || true
           xcrun simctl install "$DEVICE" "$APP"
 
           xcrun simctl spawn "$DEVICE" log stream \
