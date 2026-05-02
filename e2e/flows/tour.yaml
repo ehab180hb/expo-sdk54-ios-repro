@@ -40,7 +40,16 @@ appId: io.example.expoSdk54Todo
 - assertVisible: 'walk the dog'
 - assertVisible: '2 items left'
 
-# 4. SKIPPED: tap-to-toggle a row.
+# 4a. Dismiss the keyboard before reaching for bottom-of-screen
+# elements (filter tabs, clear-completed footer).
+# Hurdle, run 25257379093: filter-completed tab was occluded by the
+# software keyboard left up by the prior inputText. Maestro's
+# hideKeyboard is flaky on iOS per their docs; tapping a non-
+# interactive area (the Header) is more reliable.
+- tapOn:
+    id: 'todo-header'
+
+# 4b. SKIPPED: tap-to-toggle a row.
 # Three runs (25256407706 / 25256670364 / 25256911195) all failed
 # attempting to toggle by tapping the row. Diagnosis from the
 # screenshots and Maestro's "Element not found" errors:
