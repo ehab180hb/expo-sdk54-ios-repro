@@ -130,30 +130,32 @@ jobs:
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
           SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | sed -n '/Schemes:/,$p' | sed '1d' | awk 'NF' | head -1 | tr -d ' ')
           echo "Workspace=$WORKSPACE Scheme=$SCHEME"
-          # CODE_SIGN_IDENTITY="-" = ad-hoc sign so simctl install accepts it
-          # (Xcode 16 simctl rejects unsigned .app with NSInternalInconsistencyException).
-          # Configuration=Release embeds main.jsbundle, no Metro needed.
-          # -destination is required; without it xcodebuild picks the
-          # "Any iOS Simulator Device" placeholder and skips linking the
-          # final .app (manifests as empty find result downstream).
+          # Match the exact form that worked for Debug in the manual
+          # tmate dry-run: NO -quiet, NO -destination, just SDK + config.
+          # CODE_SIGNING_ALLOWED=NO is fine here because the Codesign
+          # step that follows ad-hoc-signs the .app afterward.
+          # We pipe the full output through tee for archival, then
+          # filter to relevant lines for the workflow log.
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ./derived \
-            -quiet \
-            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build \
-            2>&1 | tee xcodebuild.log | tail -100
+            2>&1 | tee xcodebuild.log | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |/tmp.*\.app|BUILD)' | tail -100 || true
           # Sanity check: a real .app must exist after this.
           if [ -z "$(find derived -name '*.app' -type d 2>/dev/null | head -1)" ]; then
-            echo "::error::xcodebuild succeeded but produced no .app — destination/sdk likely misconfigured"
-            grep -E "BUILD FAILED|BUILD SUCCEEDED|error:" xcodebuild.log | tail -20
+            echo "::error::xcodebuild succeeded but produced no .app"
+            echo "--- tail of full xcodebuild.log ---"
+            tail -50 xcodebuild.log
+            echo "--- error/fatal lines ---"
+            grep -E "error:|FAILED|fatal" xcodebuild.log | tail -30
             exit 1
           fi
+          echo "Built: $(find derived -name '*.app' -type d 2>/dev/null | head -1)"
 
       - name: Boot iPhone 15/16/17 Pro sim
         run: |
