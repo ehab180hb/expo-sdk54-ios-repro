@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 60
     defaults:
       run:
-        working-directory: /tmp
+        working-directory: /Users/runner/work/scratch
     steps:
       - name: Show environment
         run: |
@@ -52,9 +52,14 @@ jobs:
 
       - name: Create minimal Expo SDK 54 app
         run: |
-          cd /tmp
+          # Use a dir under /Users/runner — NOT /tmp — to dodge the
+          # macOS /tmp -> /private/tmp symlink that confuses Metro's
+          # resolver (it normalizes some paths via realpath but not
+          # others, so the bundler sees /tmp/.../index.ts as missing
+          # even when it exists at /private/tmp/.../index.ts).
+          mkdir -p /Users/runner/work/scratch
+          cd /Users/runner/work/scratch
           rm -rf mondid-min
-          # Use npm directly, no yarn workspace at this scratch dir.
           npx create-expo-app@latest mondid-min --template blank-typescript --no-install
           cd mondid-min
           # Pin Expo SDK 54 explicitly to match the real app.
@@ -64,7 +69,7 @@ jobs:
 
       - name: Add suspect deps + babel plugin
         run: |
-          cd /private/tmp/mondid-min
+          cd /Users/runner/work/scratch/mondid-min
           # The exact same flagging dep set from mondid-finance-mobile.
           npm install --legacy-peer-deps \
             react-native-unistyles@~3.2 \
@@ -118,7 +123,7 @@ jobs:
           # Ensure entry point exists. package.json says main=index.ts;
           # create-expo-app SDK 54 template no longer includes one (the
           # bundler error from prior run was: "Unable to resolve module
-          # /tmp/mondid-min/index.ts"). Write the standard Expo root
+          # /Users/runner/work/scratch/mondid-min/index.ts"). Write the standard Expo root
           # component registration boilerplate.
           cat > index.ts <<'EOF'
           import { registerRootComponent } from "expo";
@@ -129,14 +134,14 @@ jobs:
 
       - name: Expo prebuild iOS + pod install
         run: |
-          cd /private/tmp/mondid-min
+          cd /Users/runner/work/scratch/mondid-min
           npx expo prebuild --platform ios --no-install
           cd ios
           pod install --repo-update 2>&1 | tee pod-install.log | tail -50
 
       - name: Xcodebuild Release (embeds JS bundle so we exercise the dep stack without Metro)
         run: |
-          cd /private/tmp/mondid-min/ios
+          cd /Users/runner/work/scratch/mondid-min/ios
           set -o pipefail
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
           # Schemes are listed alphabetically by xcodebuild -list, and the
@@ -200,7 +205,7 @@ jobs:
 
       - name: Inspect built .app
         run: |
-          cd /private/tmp/mondid-min/ios
+          cd /Users/runner/work/scratch/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "APP=$APP"
           echo "--- top-level ---"
@@ -215,7 +220,7 @@ jobs:
 
       - name: Codesign .app (ad-hoc, required for simctl install on Xcode 16)
         run: |
-          cd /private/tmp/mondid-min/ios
+          cd /Users/runner/work/scratch/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "Codesigning $APP"
           # Sign the main app deeply (covers Frameworks/* automatically).
@@ -225,7 +230,7 @@ jobs:
 
       - name: Install + launch + capture logs
         run: |
-          cd /private/tmp/mondid-min/ios
+          cd /Users/runner/work/scratch/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "Installing $APP onto $DEVICE"
           xcrun simctl install "$DEVICE" "$APP"
@@ -238,13 +243,13 @@ jobs:
             --level debug \
             --style syslog \
             --predicate 'process == "mondidmin" OR eventMessage CONTAINS "mondidmin" OR eventMessage CONTAINS "io.mondid.min"' \
-            > /tmp/mondid-min/full-log-stream.txt 2>&1 &
+            > /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>&1 &
           echo $! > /tmp/log.pid
           sleep 2
           # Launch with --console-pty so stdout/stderr (where Hermes
           # writes JS exceptions) come back to us.
           xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" "io.mondid.min" \
-            > /tmp/mondid-min/launch-console.txt 2>&1 &
+            > /Users/runner/work/scratch/mondid-min/launch-console.txt 2>&1 &
           echo $! > /tmp/launch.pid
           sleep ${{ inputs.capture_seconds }}
           kill $(cat /tmp/launch.pid) 2>/dev/null || true
@@ -254,33 +259,33 @@ jobs:
       - name: Screenshot
         if: always()
         run: |
-          xcrun simctl io "$DEVICE" screenshot /tmp/mondid-min/screenshot.png || true
-          ls -la /tmp/mondid-min/screenshot.png || true
+          xcrun simctl io "$DEVICE" screenshot /Users/runner/work/scratch/mondid-min/screenshot.png || true
+          ls -la /Users/runner/work/scratch/mondid-min/screenshot.png || true
 
       - name: Verdict report
         if: always()
         run: |
-          REPORT=/tmp/mondid-min/VERDICT.txt
+          REPORT=/Users/runner/work/scratch/mondid-min/VERDICT.txt
           echo "=== mondid-min verdict $(date -u) ===" > $REPORT
           echo >> $REPORT
           echo "--- launch-console.txt ---" >> $REPORT
-          cat /tmp/mondid-min/launch-console.txt >> $REPORT 2>/dev/null || echo "(empty)" >> $REPORT
+          cat /Users/runner/work/scratch/mondid-min/launch-console.txt >> $REPORT 2>/dev/null || echo "(empty)" >> $REPORT
           echo >> $REPORT
           echo "--- log-stream errors ---" >> $REPORT
-          grep -iE 'error|exception|unhandled|TypeError|Invariant|HostFunction|Hermes|Nitro|Worklets|Unistyles|fatal|RCTFatal|abort|SIGABRT' /tmp/mondid-min/full-log-stream.txt 2>/dev/null \
+          grep -iE 'error|exception|unhandled|TypeError|Invariant|HostFunction|Hermes|Nitro|Worklets|Unistyles|fatal|RCTFatal|abort|SIGABRT' /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>/dev/null \
             | grep -v 'level=info' | head -100 >> $REPORT
           echo >> $REPORT
           echo "--- log-stream tail (200 lines) ---" >> $REPORT
-          tail -200 /tmp/mondid-min/full-log-stream.txt 2>/dev/null >> $REPORT
+          tail -200 /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>/dev/null >> $REPORT
           echo >> $REPORT
           echo "--- VERDICT ---" >> $REPORT
-          if grep -q 'HELLO mondid-min' /tmp/mondid-min/launch-console.txt 2>/dev/null || \
-             grep -q 'HELLO mondid-min' /tmp/mondid-min/full-log-stream.txt 2>/dev/null; then
+          if grep -q 'HELLO mondid-min' /Users/runner/work/scratch/mondid-min/launch-console.txt 2>/dev/null || \
+             grep -q 'HELLO mondid-min' /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>/dev/null; then
             echo "BOOTED — minimal repro shows HELLO. Dep stack is fine; bug is in app code." >> $REPORT
-          elif grep -qE 'Object is not a function|TypeError' /tmp/mondid-min/launch-console.txt 2>/dev/null || \
-               grep -qE 'Object is not a function|TypeError' /tmp/mondid-min/full-log-stream.txt 2>/dev/null; then
+          elif grep -qE 'Object is not a function|TypeError' /Users/runner/work/scratch/mondid-min/launch-console.txt 2>/dev/null || \
+               grep -qE 'Object is not a function|TypeError' /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>/dev/null; then
             echo "CRASH_SAME — same TypeError/runtime-not-ready as EAS build. Bug is in dep stack." >> $REPORT
-          elif grep -qE 'RCTFatal|Invariant|abort\(\)|fatal' /tmp/mondid-min/full-log-stream.txt 2>/dev/null; then
+          elif grep -qE 'RCTFatal|Invariant|abort\(\)|fatal' /Users/runner/work/scratch/mondid-min/full-log-stream.txt 2>/dev/null; then
             echo "CRASH_DIFFERENT — minimal repro crashes, but with a different signature." >> $REPORT
           else
             echo "UNKNOWN — neither HELLO nor a clear crash signature. Inspect logs+screenshot." >> $REPORT
@@ -295,13 +300,13 @@ jobs:
         with:
           name: ios-min-repro
           path: |
-            /tmp/mondid-min/launch-console.txt
-            /tmp/mondid-min/full-log-stream.txt
-            /tmp/mondid-min/VERDICT.txt
-            /tmp/mondid-min/screenshot.png
-            /tmp/mondid-min/ios/xcodebuild.log
-            /tmp/mondid-min/ios/pod-install.log
-            /tmp/mondid-min/package.json
-            /tmp/mondid-min/babel.config.js
-            /tmp/mondid-min/App.tsx
+            /Users/runner/work/scratch/mondid-min/launch-console.txt
+            /Users/runner/work/scratch/mondid-min/full-log-stream.txt
+            /Users/runner/work/scratch/mondid-min/VERDICT.txt
+            /Users/runner/work/scratch/mondid-min/screenshot.png
+            /Users/runner/work/scratch/mondid-min/ios/xcodebuild.log
+            /Users/runner/work/scratch/mondid-min/ios/pod-install.log
+            /Users/runner/work/scratch/mondid-min/package.json
+            /Users/runner/work/scratch/mondid-min/babel.config.js
+            /Users/runner/work/scratch/mondid-min/App.tsx
           retention-days: 7
