@@ -34,9 +34,6 @@ jobs:
   min-repro:
     runs-on: macos-15
     timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: /Users/runner/work/scratch
     steps:
       - name: Show environment
         run: |
