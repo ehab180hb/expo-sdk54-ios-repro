@@ -128,8 +128,18 @@ jobs:
           cd /tmp/mondid-min/ios
           set -o pipefail
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | sed -n '/Schemes:/,$p' | sed '1d' | awk 'NF' | head -1 | tr -d ' ')
+          # Schemes are listed alphabetically by xcodebuild -list, and the
+          # FIRST one is "EXConstants" (a pod), not "mondidmin" (the app).
+          # Building the EXConstants scheme silently succeeds with no .app.
+          # Hardcode the app scheme — it always matches the bundle id slug.
+          SCHEME="mondidmin"
           echo "Workspace=$WORKSPACE Scheme=$SCHEME"
+          # Sanity check the scheme exists
+          if ! xcodebuild -workspace "$WORKSPACE" -list 2>/dev/null | grep -qE "^\s+${SCHEME}\s*$"; then
+            echo "::error::Scheme $SCHEME not found in workspace $WORKSPACE"
+            xcodebuild -workspace "$WORKSPACE" -list 2>&1 | head -50
+            exit 1
+          fi
           # Match the exact form that worked for Debug in the manual
           # tmate dry-run: NO -quiet, NO -destination, just SDK + config.
           # CODE_SIGNING_ALLOWED=NO is fine here because the Codesign
