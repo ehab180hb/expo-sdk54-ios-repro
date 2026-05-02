@@ -1,0 +1,176 @@
+name: Explorer (drive iOS sim like a human)
+
+# A parameterized "remote control" of the cloud-built iOS sim. You hand
+# it a Maestro flow (paste the YAML in workflow_dispatch) and it returns
+# an artifact bundle containing:
+#   - per-step screenshots (commands-*.json + screenshot-*.png)
+#   - per-step UI hierarchy (in commands-*.json)
+#   - maestro.log (full step log)
+#   - JUnit report.xml
+#   - screen.mov (full session screen recording from simctl)
+#   - final-screenshot.png (post-run state)
+#   - input-flow.yaml (the flow you sent — for reproducibility)
+#
+# Loop pattern (for a human or an AI driving this remotely):
+#   1. Write a Maestro flow describing the next move(s)
+#   2. Trigger this workflow with that flow
+#   3. Download the artifact (~5 min later)
+#   4. Read the screenshots / hierarchy to see what happened
+#   5. Decide the next move; repeat
+#
+# The .app cache is the SAME shape js-only-fast.yml uses, so there's
+# zero xcodebuild — only ~20s of `expo export:embed` per run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      flow:
+        description: 'Maestro YAML (must include `appId:` header + `---` + steps)'
+        required: true
+        type: string
+      record_video:
+        description: 'Record full simctl screen video (in addition to per-step screenshots)'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: explorer-${{ github.ref }}
+  cancel-in-progress: false # Don't cancel — each run is a deliberate "move"
+
+jobs:
+  explore:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Restore pre-built .app from cache
+        id: app-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: pre-built-app/
+          # Same NATIVE-config-only key shape as js-only-fast.yml
+          key: pre-built-app-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js') }}
+          restore-keys: |
+            pre-built-app-${{ runner.os }}-
+
+      - name: Fail if no cached .app
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::error::No cached .app for this native config."
+          echo "::error::Run ios-build-cached.yml first to seed the cache."
+          exit 1
+
+      - name: Bundle current JS into the cached .app
+        run: |
+          set -o pipefail
+          mkdir -p bundle-out/assets
+          npx expo export:embed \
+            --entry-file index.ts \
+            --platform ios \
+            --dev false \
+            --reset-cache \
+            --bundle-output bundle-out/main.jsbundle \
+            --assets-dest bundle-out/assets \
+            --config-cmd "$(which node) $(npm root)/react-native/cli.js config"
+
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          [ -d "$APP" ] || { echo "::error::no .app in restored cache"; exit 1; }
+          cp bundle-out/main.jsbundle "$APP/main.jsbundle"
+          if [ -d bundle-out/assets ]; then
+            cp -r bundle-out/assets/. "$APP/" || true
+          fi
+          /usr/bin/codesign --force --sign - --deep "$APP"
+
+      - name: Boot sim + install
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 1[5-9] Pro" \
+                   | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Run flow with full debug output
+        env:
+          # Pass the input via env to avoid shell-escaping issues with
+          # multi-line YAML. ${{ inputs.flow }} interpolated directly
+          # into a heredoc would break on EOF in the input.
+          FLOW_CONTENT: ${{ inputs.flow }}
+          RECORD_VIDEO: ${{ inputs.record_video }}
+        run: |
+          export PATH="$HOME/.maestro/bin:$PATH"
+          mkdir -p artifacts
+
+          # Write the user's flow to disk
+          printf '%s\n' "$FLOW_CONTENT" > /tmp/flow.yaml
+          cp /tmp/flow.yaml artifacts/input-flow.yaml
+          echo "--- input flow ---"
+          cat /tmp/flow.yaml
+          echo "--- end input ---"
+
+          # Optional belt-and-suspenders screen recording (Maestro's own
+          # startRecording/stopRecording is more granular; this captures
+          # everything end-to-end regardless of what the flow does)
+          REC_PID=""
+          if [ "$RECORD_VIDEO" = "true" ]; then
+            xcrun simctl io "$DEVICE" recordVideo --codec=h264 artifacts/screen.mov &
+            REC_PID=$!
+            sleep 1
+          fi
+
+          # Run maestro. --test-output-dir captures screenshots + video +
+          # commands-*.json (per-step UI hierarchy snapshots). --debug-output
+          # adds maestro.log. Same dir = consolidated bundle.
+          set +e
+          maestro test \
+            --test-output-dir=artifacts \
+            --debug-output=artifacts \
+            --format junit \
+            --output artifacts/report.xml \
+            /tmp/flow.yaml
+          MAESTRO_RC=$?
+          set -e
+
+          # SIGINT (not SIGKILL) so simctl finalizes the .mov file
+          if [ -n "$REC_PID" ]; then
+            kill -INT "$REC_PID" 2>/dev/null || true
+            wait "$REC_PID" 2>/dev/null || true
+          fi
+
+          # Final state — useful when the flow fails partway through
+          xcrun simctl io "$DEVICE" screenshot artifacts/final-screenshot.png 2>&1 || true
+
+          echo "--- artifact contents ---"
+          ls -la artifacts/
+          echo "--- maestro.log tail ---"
+          tail -50 artifacts/maestro.log 2>/dev/null || echo "(no maestro.log)"
+
+          # Surface the maestro RC, but don't fail the workflow — the
+          # artifact contents are the real product. The user reads the
+          # report.xml / screenshots to interpret success/failure.
+          echo "::notice::maestro exit code = $MAESTRO_RC"
+
+      - name: Upload artifact bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: explorer-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
