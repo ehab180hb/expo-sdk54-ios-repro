@@ -7,8 +7,25 @@ name: Unit Tests
 on:
   push:
     branches: [master]
+    # Plan 4 T4.4.C: skip docs-only / config-only / template-only
+    # changes. Saves ~30s per such commit and keeps the unit-tests
+    # signal meaningful (it actually changed something).
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitignore'
+      - '.gitattributes'
+      - '_explorer-runs/**'
+      - 'docs/POST_MORTEMS/**'
   pull_request:
     branches: [master]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitignore'
+      - '.gitattributes'
+      - '_explorer-runs/**'
+      - 'docs/POST_MORTEMS/**'
   workflow_dispatch:
 
 concurrency:

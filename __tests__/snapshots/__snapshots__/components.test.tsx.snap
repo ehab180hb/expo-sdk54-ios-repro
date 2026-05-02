@@ -1,0 +1,129 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Component snapshots <EmptyState /> with filter=active 1`] = `
+<View
+  style={
+    {
+      "alignItems": "center",
+      "backgroundColor": "#fff",
+      "flex": 1,
+      "justifyContent": "center",
+      "padding": 32,
+    }
+  }
+  testID="empty-state"
+>
+  <Text
+    style={
+      {
+        "color": "#000",
+        "fontSize": 22,
+        "fontWeight": "600",
+        "lineHeight": 28,
+        "marginBottom": 8,
+      }
+    }
+  >
+    Nothing to do
+  </Text>
+  <Text
+    style={
+      {
+        "color": "#666",
+        "fontSize": 17,
+        "fontWeight": "400",
+        "lineHeight": 22,
+        "textAlign": "center",
+      }
+    }
+  >
+    All your todos are checked off.
+  </Text>
+</View>
+`;
+
+exports[`Component snapshots <EmptyState /> with filter=all 1`] = `
+<View
+  style={
+    {
+      "alignItems": "center",
+      "backgroundColor": "#fff",
+      "flex": 1,
+      "justifyContent": "center",
+      "padding": 32,
+    }
+  }
+  testID="empty-state"
+>
+  <Text
+    style={
+      {
+        "color": "#000",
+        "fontSize": 22,
+        "fontWeight": "600",
+        "lineHeight": 28,
+        "marginBottom": 8,
+      }
+    }
+  >
+    No todos yet
+  </Text>
+  <Text
+    style={
+      {
+        "color": "#666",
+        "fontSize": 17,
+        "fontWeight": "400",
+        "lineHeight": 22,
+        "textAlign": "center",
+      }
+    }
+  >
+    Add your first one above to get started.
+  </Text>
+</View>
+`;
+
+exports[`Component snapshots <EmptyState /> with filter=completed 1`] = `
+<View
+  style={
+    {
+      "alignItems": "center",
+      "backgroundColor": "#fff",
+      "flex": 1,
+      "justifyContent": "center",
+      "padding": 32,
+    }
+  }
+  testID="empty-state"
+>
+  <Text
+    style={
+      {
+        "color": "#000",
+        "fontSize": 22,
+        "fontWeight": "600",
+        "lineHeight": 28,
+        "marginBottom": 8,
+      }
+    }
+  >
+    No completed todos
+  </Text>
+  <Text
+    style={
+      {
+        "color": "#666",
+        "fontSize": 17,
+        "fontWeight": "400",
+        "lineHeight": 22,
+        "textAlign": "center",
+      }
+    }
+  >
+    Check one off to see it here.
+  </Text>
+</View>
+`;
+
+exports[`Component snapshots <ErrorBoundary /> renders children when no error 1`] = `null`;

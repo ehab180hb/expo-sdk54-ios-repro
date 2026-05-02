@@ -1,0 +1,62 @@
+# Dependabot — Plan 4 T4.3.L
+#
+# Weekly bumps with grouped PRs to keep the dep tree fresh without
+# drowning in PR noise. Patch-level (0.0.x) updates are auto-merged
+# via .github/workflows/auto-merge.yml (T4.5.G); minor and major
+# require explicit review.
+#
+# Out-of-matrix Expo packages listed in `expo.install.exclude` are
+# also explicitly ignored here — Dependabot would otherwise propose
+# bumps that violate our deliberate version pins.
+
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 5
+    groups:
+      # Bundle dev tooling bumps into ONE PR so reviewers don't pay
+      # context-switch cost on prettier + eslint + types updates.
+      dev-tooling:
+        patterns:
+          - 'eslint*'
+          - '@typescript-eslint/*'
+          - 'typescript-eslint'
+          - 'prettier*'
+          - 'jest*'
+          - '@testing-library/*'
+          - '@types/*'
+          - 'lefthook'
+          - 'globals'
+      # All Expo packages bump together when they bump. SDK 54
+      # constraints live in expo.install.exclude per docs/DEPENDENCIES.md.
+      expo-family:
+        patterns:
+          - 'expo'
+          - 'expo-*'
+          - '@expo/*'
+          - 'jest-expo'
+    ignore:
+      # These packages are pinned off-matrix on purpose. See
+      # docs/DEPENDENCIES.md for the rationale per package. Bumping
+      # any of them is a deliberate decision, not a Dependabot one.
+      - dependency-name: 'react-native-safe-area-context'
+      - dependency-name: '@react-native-async-storage/async-storage'
+      # Pinned exact (avoid SemVer drift on the RN runtime / React)
+      - dependency-name: 'react'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-test-renderer'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 3
+    groups:
+      action-deps:
+        patterns:
+          - '*'

@@ -4,7 +4,7 @@ module.exports = {
   // jest-expo's default transformIgnorePatterns excludes most RN packages
   // from transformation; we add ours that ship untranspiled ESM.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?|react-clone-referenced-element|@react-navigation|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-unistyles|react-native-reanimated|react-native-worklets|react-native-gesture-handler|react-native-edge-to-edge|react-native-nitro-modules|@react-native-async-storage/async-storage))',
+    'node_modules/(?!((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?|react-clone-referenced-element|@react-navigation|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-unistyles|react-native-reanimated|react-native-worklets|react-native-gesture-handler|react-native-nitro-modules|@react-native-async-storage/async-storage))',
   ],
   setupFiles: ['<rootDir>/jest.setup.ts'],
   // @testing-library/react-native v13+ ships matchers as part of the

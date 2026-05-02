@@ -89,3 +89,11 @@ pre-push:
       # (~3-5s); the cheaper bash-only lint-ci-masks runs at pre-commit.
       glob: '.github/workflows/*.{yml,yaml}'
       run: npx --yes github-actionlint
+
+    npm-audit:
+      # Plan 4 T4.3.K. Fails the push if any HIGH or CRITICAL severity
+      # vulnerability is in the dep tree. Lower severities (low/moderate)
+      # are tolerated — they're noisy and rarely actionable in an RN/Expo
+      # tree where most warnings come from transitive build-time deps.
+      # Renovate (.github/dependabot.yml) handles routine bumps.
+      run: npm audit --audit-level=high

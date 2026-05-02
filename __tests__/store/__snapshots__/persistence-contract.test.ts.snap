@@ -1,0 +1,21 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Persisted store schema contract matches the locked persisted shape (snapshot) 1`] = `
+{
+  "filter": "completed",
+  "todos": [
+    {
+      "completed": false,
+      "createdAt": 1700000000000,
+      "id": "a",
+      "text": "walk dog",
+    },
+    {
+      "completed": true,
+      "createdAt": 1700000000000,
+      "id": "b",
+      "text": "buy milk",
+    },
+  ],
+}
+`;
