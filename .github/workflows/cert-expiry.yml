@@ -1,0 +1,118 @@
+name: Cert / Provisioning expiry watch
+
+# Plan 4 T4.5.F. Weekly cron that scans for any iOS provisioning
+# profile or signing certificate within 30 days of expiry and opens
+# an issue. Prevents the "build fails 2 hours before release"
+# scenario.
+#
+# This workflow is INERT until you add real distribution credentials
+# to the repo (not the case for the prototype). It documents the
+# pattern so the next powerhouse spawn inherits it. Activate by:
+#   1. Adding .p12 / .mobileprovision files (encrypted via secrets)
+#      OR pointing at the EAS profile via `eas credentials`
+#   2. Updating the SCAN_GLOB env below
+
+on:
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  watch:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for provisioning profiles + certs
+        id: scan
+        env:
+          # Glob for any profile or cert files committed to the repo.
+          # Adjust per project — for EAS-managed credentials, replace
+          # this step with a `eas credentials` invocation.
+          SCAN_GLOB: 'ios/credentials/**/*.{mobileprovision,p12}'
+        run: |
+          # advisory: globstar/nullglob may already be set. ls glob may match zero files when the repo has no credentials yet — that's the expected "inert" state.
+          shopt -s globstar nullglob 2>/dev/null \
+            || true # advisory: see step comment
+          mapfile -t hits < <(ls $SCAN_GLOB 2>/dev/null \
+            || true) # advisory: see step comment
+          if [ "${#hits[@]}" -eq 0 ]; then
+            echo "::notice::no provisioning profiles or certs found — workflow inert (this is normal for prototype repos)"
+            echo "expired_count=0" >> "$GITHUB_OUTPUT"
+            echo "expiring_count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NOW_EPOCH=$(date +%s)
+          THIRTY_DAYS=$((30 * 24 * 60 * 60))
+          declare -a expired
+          declare -a expiring
+          for f in "${hits[@]}"; do
+            # Profiles: parse the embedded plist via security cms
+            if [[ "$f" == *.mobileprovision ]]; then
+              expiry=$(security cms -D -i "$f" 2>/dev/null \
+                | plutil -extract ExpirationDate raw - 2>/dev/null \
+                | xargs -I{} date -j -f "%Y-%m-%dT%H:%M:%SZ" "{}" "+%s" 2>/dev/null \
+                || echo "")
+            elif [[ "$f" == *.p12 ]]; then
+              # P12 cert expiry — requires the password; skip in this
+              # public workflow. Document the pattern; activate via
+              # a fork that has the password as a secret.
+              expiry=""
+            fi
+            if [ -z "$expiry" ]; then
+              continue
+            fi
+            delta=$((expiry - NOW_EPOCH))
+            if [ "$delta" -le 0 ]; then
+              expired+=("$f (expired)")
+            elif [ "$delta" -le "$THIRTY_DAYS" ]; then
+              days=$((delta / 86400))
+              expiring+=("$f (${days} days left)")
+            fi
+          done
+          echo "expired_count=${#expired[@]}" >> "$GITHUB_OUTPUT"
+          echo "expiring_count=${#expiring[@]}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'EXPIRED<<EOF'
+            printf '%s\n' "${expired[@]}"
+            echo 'EOF'
+            echo 'EXPIRING<<EOF'
+            printf '%s\n' "${expiring[@]}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open issue if any cert is expired or expiring
+        if: steps.scan.outputs.expired_count != '0' || steps.scan.outputs.expiring_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPIRED: ${{ steps.scan.outputs.EXPIRED }}
+          EXPIRING: ${{ steps.scan.outputs.EXPIRING }}
+        run: |
+          BODY=$(cat <<EOF
+          Cert / provisioning watch ran on $(date -u +%Y-%m-%d).
+
+          ### Expired
+          \`\`\`
+          ${EXPIRED:-(none)}
+          \`\`\`
+
+          ### Expiring within 30 days
+          \`\`\`
+          ${EXPIRING:-(none)}
+          \`\`\`
+
+          See \`docs/PLATFORM.md\` for the credential-handling
+          policy. The build pipeline will fail the moment any cert
+          here actually expires; rotate before then.
+
+          (Auto-issued by .github/workflows/cert-expiry.yml — Plan 4 T4.5.F)
+          EOF
+          )
+          gh issue create \
+            --title "[cert-expiry] $(date -u +%Y-%m-%d) — review credentials" \
+            --body "$BODY" \
+            --label "cert-expiry"

@@ -1,0 +1,128 @@
+name: Drift report
+
+# Plan 4 T4.7.C. Daily check that the testID inventory matches the
+# documentation (docs/EXPLORER.md's testID table). If they diverge —
+# someone added a testID without updating docs, or removed one
+# without cleaning the docs — open an issue.
+#
+# This is the lightweight version of the drift idea: only one drift
+# class is checked. Future expansions could check skill freshness,
+# README staleness, dependency-policy doc consistency, etc.
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract testIDs from inventory
+        id: inv
+        run: |
+          # Grep src/ for testID values (handles both string and
+          # template-literal forms). Output one ID per line, sorted.
+          # advisory: rg returns 1 when no matches — that's NOT a failure here, just means a pattern wasn't present.
+          set -o pipefail
+          rg -o --no-filename --no-line-number 'testID="([^"]+)"' src/ \
+            -r '$1' > /tmp/inventory-ids.txt \
+            || true # advisory: see step comment
+          rg -o --no-filename --no-line-number 'testID=\{`([^`]+)`\}' src/ \
+            -r '$1' >> /tmp/inventory-ids.txt \
+            || true # advisory: see step comment
+          sort -u /tmp/inventory-ids.txt > /tmp/inventory-sorted.txt
+          echo "$(wc -l < /tmp/inventory-sorted.txt) IDs in source"
+          cat /tmp/inventory-sorted.txt
+
+      - name: Extract testIDs from docs
+        id: docs
+        run: |
+          # Look for backtick-quoted IDs in the EXPLORER.md testID table.
+          # The table format is: | `id-name` | What |
+          # We extract the first column.
+          set -o pipefail
+          # advisory: rg returns 1 when no IDs in the docs table — informational, not a gate.
+          rg -o '\| `([^`]+)`' docs/EXPLORER.md -r '$1' \
+            > /tmp/docs-ids-raw.txt \
+            || true # advisory: see step comment
+          # Strip dynamic placeholders like {id} so docs ID `todo-text-{id}`
+          # matches inventory's template-literal `todo-text-${todo.id}`.
+          sed -E 's/\{[^}]+\}/PLACEHOLDER/g; s/\$\{[^}]+\}/PLACEHOLDER/g' \
+            /tmp/docs-ids-raw.txt | sort -u > /tmp/docs-sorted.txt
+
+          # Same normalization for inventory
+          sed -E 's/\$\{[^}]+\}/PLACEHOLDER/g' /tmp/inventory-sorted.txt \
+            > /tmp/inventory-norm.txt
+          sort -u /tmp/inventory-norm.txt -o /tmp/inventory-norm.txt
+          echo "$(wc -l < /tmp/docs-sorted.txt) IDs in docs/EXPLORER.md"
+          cat /tmp/docs-sorted.txt
+
+      - name: Diff and report
+        id: diff
+        run: |
+          comm -23 /tmp/inventory-norm.txt /tmp/docs-sorted.txt \
+            > /tmp/in-source-not-docs.txt
+          comm -13 /tmp/inventory-norm.txt /tmp/docs-sorted.txt \
+            > /tmp/in-docs-not-source.txt
+
+          NEW_COUNT=$(wc -l < /tmp/in-source-not-docs.txt)
+          STALE_COUNT=$(wc -l < /tmp/in-docs-not-source.txt)
+          echo "new_count=$NEW_COUNT" >> "$GITHUB_OUTPUT"
+          echo "stale_count=$STALE_COUNT" >> "$GITHUB_OUTPUT"
+
+          {
+            echo 'NEW_IDS<<EOF'
+            cat /tmp/in-source-not-docs.txt
+            echo 'EOF'
+            echo 'STALE_IDS<<EOF'
+            cat /tmp/in-docs-not-source.txt
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open issue if drift detected
+        if: steps.diff.outputs.new_count != '0' || steps.diff.outputs.stale_count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_IDS: ${{ steps.diff.outputs.NEW_IDS }}
+          STALE_IDS: ${{ steps.diff.outputs.STALE_IDS }}
+        run: |
+          # Don't spam: one drift issue per week max. Look for an
+          # existing open issue with our marker.
+          existing=$(gh issue list --state open --label drift --json number --jq '.[0].number' || echo '')
+          BODY=$(cat <<EOF
+          <!-- drift-report -->
+          Drift between source testIDs and \`docs/EXPLORER.md\`.
+
+          ### testIDs in source but not in docs
+          \`\`\`
+          ${NEW_IDS:-(none)}
+          \`\`\`
+
+          ### testIDs in docs but not in source
+          \`\`\`
+          ${STALE_IDS:-(none)}
+          \`\`\`
+
+          Update the testID table in \`docs/EXPLORER.md\` to match.
+          The same drift would surface in the testID inventory snapshot
+          test (\`__tests__/inventory/testid-snapshot.test.ts\`) on the
+          next CI run; this issue is a heads-up.
+
+          (Auto-issued by .github/workflows/drift-report.yml — Plan 4 T4.7.C)
+          EOF
+          )
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$BODY"
+          else
+            gh issue create \
+              --title "[drift] testID inventory vs docs/EXPLORER.md ($(date -u +%Y-%m-%d))" \
+              --body "$BODY" \
+              --label drift
+          fi

@@ -1,0 +1,70 @@
+name: Iteration watcher
+
+# Plan 4 T4.7.A. If a single PR accumulates >3 push events, the
+# author has been struggling — auto-comment with a suggestion to
+# write a post-mortem (docs/POST_MORTEMS/TEMPLATE.md). The whole
+# point is the forcing function: every painful journey produces an
+# artifact, so the next person doesn't repeat it.
+
+on:
+  pull_request:
+    types: [synchronize] # fires on EACH push to the PR
+
+permissions:
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Count pushes on this PR
+        id: count
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Use the GH API to list events of type PullRequestEvent /
+          # PushEvent on this PR. The simplest proxy: count commits
+          # on the PR's head branch via the standard PR commits API.
+          count=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/commits" \
+                  --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "::notice::PR #${PR_NUMBER} has ${count} commits"
+
+      - name: Comment if >3 commits and not already nudged
+        if: steps.count.outputs.count >= 4
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COUNT: ${{ steps.count.outputs.count }}
+        run: |
+          # Has the bot already nudged this PR? Look for the magic
+          # marker in existing comments to avoid spamming.
+          existing=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+                     --jq '.[] | select(.body | contains("<!-- iteration-watcher -->")) | .id')
+          if [ -n "$existing" ]; then
+            echo "::notice::PR already nudged — skipping"
+            exit 0
+          fi
+
+          gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
+          <!-- iteration-watcher -->
+          📓 **Heads up — this PR has ${COUNT} commits.**
+
+          That usually means a debug journey worth capturing. Once it
+          merges, please drop a copy of \`docs/POST_MORTEMS/TEMPLATE.md\`
+          into \`docs/POST_MORTEMS/$(date -u +%Y-%m)-<short-name>.md\`
+          with:
+
+          - Run-ID timeline of the failures
+          - Root-cause cluster (what was the underlying gap?)
+          - Deliverables produced + deferred
+
+          The next person to hit a similar journey gets a head start.
+          See \`~/.claude/plans/atomic-honking-haven.md\` Plan 3 T3.A
+          for the convention.
+
+          (Auto-issued by .github/workflows/iteration-watcher.yml — Plan 4 T4.7.A)
+          EOF
+          )"
