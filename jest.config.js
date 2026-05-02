@@ -16,16 +16,20 @@ module.exports = {
   testMatch: ['<rootDir>/__tests__/**/*.test.{ts,tsx}'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/index.ts', '!src/theme/unistyles.ts'],
   coverageThreshold: {
-    // Ratchet policy: thresholds set to current actual + 0% (anti-regression).
-    // When new tests land that push coverage higher, bump these so the
-    // floor only ever moves up. See docs/TESTING.md for the policy detail.
-    // Components currently uncovered: Header, EmptyState, FilterTabs,
-    // TodoList, HomeScreen — fine to add as iteration continues.
+    // Ratchet (Plan 4 T4.2.G): floor only moves UP. Plan target was
+    // 80/85/85/80; landed Phase 2 puts us at 86.2 / 100 / 97.24 / 97.14
+    // (br/fn/lines/stmt). The 6 previously-zero components (Header,
+    // EmptyState, FilterTabs, TodoList, HomeScreen, persistence.ts) +
+    // ErrorBoundary all have dedicated tests now.
+    //
+    // Buffer of ~1-2% under current to absorb natural fluctuation; if
+    // a new test pushes coverage higher, RAISE these thresholds in
+    // the same PR to lock the gain.
     global: {
-      branches: 50,
-      functions: 55,
-      lines: 55,
-      statements: 50,
+      branches: 85,
+      functions: 95,
+      lines: 95,
+      statements: 95,
     },
   },
 };

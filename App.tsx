@@ -8,13 +8,18 @@ import '@/theme/unistyles';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HomeScreen } from '@/screens/HomeScreen';
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <HomeScreen />
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <ErrorBoundary scope="root">
+      <SafeAreaProvider>
+        <ErrorBoundary scope="screen:home">
+          <HomeScreen />
+        </ErrorBoundary>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

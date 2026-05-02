@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -11,7 +11,11 @@ interface Props {
   todo: Todo;
 }
 
-export function TodoItem({ todo }: Props) {
+// Memoized at file bottom (`export const TodoItem = memo(TodoItemImpl)`).
+// Plan 4 T4.2.F: prevents O(N) re-renders of every row on each store
+// change. zustand selector returns a stable id-keyed list; with memo,
+// only the rows whose `todo` reference changed actually re-render.
+function TodoItemImpl({ todo }: Props) {
   const toggleTodo = useTodoStore((s) => s.toggleTodo);
   const removeTodo = useTodoStore((s) => s.removeTodo);
 
@@ -69,6 +73,8 @@ export function TodoItem({ todo }: Props) {
     </Swipeable>
   );
 }
+
+export const TodoItem = memo(TodoItemImpl);
 
 const styles = StyleSheet.create((theme) => ({
   container: {
