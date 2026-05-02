@@ -37,6 +37,9 @@ yarn-error.log*
 # Test outputs
 coverage/
 
+# Explorer artifact downloads (local-only — see scripts/dev/explore.sh)
+_explorer-runs/
+
 # Local env
 .env
 .env.local

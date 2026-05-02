@@ -123,6 +123,27 @@ step often reveals the issue (e.g. a modal you didn't expect, an
 animation mid-transition, text that's slightly different from what you
 asserted).
 
+## Hurdles already paved (the loop, demonstrated)
+
+Building `e2e/flows/tour.yaml` took 6 explorer iterations. Each
+iteration cost ~5 min and $0; together they revealed real lessons
+about how the app behaves on a real iOS sim:
+
+| #   | Run ID             | Hurdle                                                              | Diagnostic from artifact                                           | Fix                                                                                                                                                                      |
+| --- | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----------------------------------------------------------------------------------- |
+| 1   | 25256238601        | `assertVisible: "Nothing to do"` failed                             | Screenshot showed actual copy "No todos yet" (filter=all)          | Update assertion to match the all-filter copy                                                                                                                            |
+| 2   | 25256407706        | `tapOn: "buy milk"` didn't toggle the row                           | Screenshot showed both items still unchecked, "2 items left"       | Realized inner `<Text>` was tapped but `onPress` on parent `<Pressable>` (wrapped in Swipeable) didn't propagate via XCUITest                                            |
+| 3   | 25256670364        | `tapOn: { id: 'todo-item-', text: 'buy milk' }` found 0 elements    | Maestro error: "Element not found" with both criteria              | Combined selectors require ONE element matching both. testID is on Pressable, text is on inner Text.                                                                     |
+| 4   | 25256911195        | Even `id: 'todo-item-'` alone found nothing                         | Same "Element not found" but for id only                           | Pressable's `accessibilityRole="checkbox"` + `accessibilityState` collapses the row into a single XCUITest checkbox element that absorbs its own accessibilityIdentifier |
+| 5   | 25257165436        | Maestro driver startup timed out at 60s                             | Stack trace: `IOSDriverTimeoutException`                           | `MAESTRO_DRIVER_STARTUP_TIMEOUT=180000` env var on the workflow step                                                                                                     |
+| 6   | (offline analysis) | The "previously green" maestro-e2e run was hiding 3/4 flow failures | grep'd workflow log for `Failed]` after seeing duplicate test bugs | Removed `                                                                                                                                                                |     | true`from`maestro-e2e.yml`'s `maestro test`; capture RC, fail after artifact upload |
+
+The takeaway: **the screenshot is ground truth**. When something
+doesn't work, the explorer artifact reliably tells you why. Each
+hurdle's fix was a one-line edit to either the flow YAML, the
+workflow YAML, or in one case the source component (which we
+documented but didn't apply, to preserve VoiceOver semantics).
+
 ## What the AI loop looks like
 
 Here's the actual pattern an autonomous agent would run:
