@@ -125,18 +125,22 @@ asserted).
 
 ## Hurdles already paved (the loop, demonstrated)
 
-Building `e2e/flows/tour.yaml` took 6 explorer iterations. Each
+Building `e2e/flows/tour.yaml` took **8 explorer iterations** before
+the run came back green (`failures="0"` in `report.xml`). Each
 iteration cost ~5 min and $0; together they revealed real lessons
 about how the app behaves on a real iOS sim:
 
 | #   | Run ID             | Hurdle                                                              | Diagnostic from artifact                                           | Fix                                                                                                                                                                      |
-| --- | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----------------------------------------------------------------------------------- |
+| --- | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | 25256238601        | `assertVisible: "Nothing to do"` failed                             | Screenshot showed actual copy "No todos yet" (filter=all)          | Update assertion to match the all-filter copy                                                                                                                            |
 | 2   | 25256407706        | `tapOn: "buy milk"` didn't toggle the row                           | Screenshot showed both items still unchecked, "2 items left"       | Realized inner `<Text>` was tapped but `onPress` on parent `<Pressable>` (wrapped in Swipeable) didn't propagate via XCUITest                                            |
 | 3   | 25256670364        | `tapOn: { id: 'todo-item-', text: 'buy milk' }` found 0 elements    | Maestro error: "Element not found" with both criteria              | Combined selectors require ONE element matching both. testID is on Pressable, text is on inner Text.                                                                     |
 | 4   | 25256911195        | Even `id: 'todo-item-'` alone found nothing                         | Same "Element not found" but for id only                           | Pressable's `accessibilityRole="checkbox"` + `accessibilityState` collapses the row into a single XCUITest checkbox element that absorbs its own accessibilityIdentifier |
 | 5   | 25257165436        | Maestro driver startup timed out at 60s                             | Stack trace: `IOSDriverTimeoutException`                           | `MAESTRO_DRIVER_STARTUP_TIMEOUT=180000` env var on the workflow step                                                                                                     |
-| 6   | (offline analysis) | The "previously green" maestro-e2e run was hiding 3/4 flow failures | grep'd workflow log for `Failed]` after seeing duplicate test bugs | Removed `                                                                                                                                                                |     | true`from`maestro-e2e.yml`'s `maestro test`; capture RC, fail after artifact upload |
+| 6   | (offline analysis) | The "previously green" maestro-e2e run was hiding 3/4 flow failures | grep'd workflow log for `Failed]` after seeing duplicate test bugs | Removed `\|\| true` from `maestro-e2e.yml`'s `maestro test`; capture RC, fail after artifact upload                                                                      |
+| 7   | 25257379093        | `assertVisible: id: empty-state` failed after switching filter      | Screenshot showed the keyboard occluding the bottom filter tabs    | Added a keyboard-dismiss step (first tried `tapOn: id: 'todo-header'` — no good because Header is a plain `<View>`, not a `<Pressable>`)                                 |
+| 8   | 25257533431        | Header tap didn't dismiss keyboard                                  | Same screenshot — keyboard still up, both items still showing      | Replaced with `- hideKeyboard` (Maestro's iOS auto-hide via swipes)                                                                                                      |
+| ✓   | 25257731793        | **All 8 hurdles cleared**                                           | `tests=1 failures=0 status=SUCCESS time=104s`                      | n/a — the loop closed                                                                                                                                                    |
 
 The takeaway: **the screenshot is ground truth**. When something
 doesn't work, the explorer artifact reliably tells you why. Each
