@@ -115,6 +115,17 @@ jobs:
           # Mark the bundle id so we can launch by id later.
           jq '.expo.ios = { bundleIdentifier: "io.mondid.min" } | .expo.scheme = "mondidmin" | .expo.plugins = ["expo-secure-store","expo-web-browser"]' app.json > app.json.tmp
           mv app.json.tmp app.json
+          # Ensure entry point exists. package.json says main=index.ts;
+          # create-expo-app SDK 54 template no longer includes one (the
+          # bundler error from prior run was: "Unable to resolve module
+          # /tmp/mondid-min/index.ts"). Write the standard Expo root
+          # component registration boilerplate.
+          cat > index.ts <<'EOF'
+          import { registerRootComponent } from "expo";
+          import App from "./App";
+          registerRootComponent(App);
+          EOF
+          ls -la index.ts App.tsx package.json
 
       - name: Expo prebuild iOS + pod install
         run: |
@@ -144,6 +155,10 @@ jobs:
           # build phase actually runs (CODE_SIGNING_ALLOWED=NO suppresses
           # framework embedding for Release config — confirmed by prior
           # run dyld error: "Library not loaded: @rpath/React.framework/React").
+          # set -o pipefail above ensures xcodebuild's exit code propagates
+          # through the tee. Don't suffix with `|| true` here — that would
+          # mask "** BUILD FAILED **".
+          set -o pipefail
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -154,14 +169,21 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             build \
-            2>&1 | tee xcodebuild.log | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |/tmp.*\.app|BUILD)' | tail -100 || true
-          # Sanity check: a real .app must exist after this.
+            2>&1 | tee xcodebuild.log | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |/tmp.*\.app|BUILD)' || true
+          XCB_RC=${PIPESTATUS[0]}
+          echo "xcodebuild RC=$XCB_RC"
+          if [ "$XCB_RC" != "0" ]; then
+            echo "::error::xcodebuild failed (rc=$XCB_RC)"
+            echo "--- error/FAILED lines ---"
+            grep -E "error:|FAILED|fatal" xcodebuild.log | tail -50
+            echo "--- last 100 lines of full log ---"
+            tail -100 xcodebuild.log
+            exit 1
+          fi
+          # Belt-and-suspenders: even if xcodebuild rc=0, .app must exist.
           if [ -z "$(find derived -name '*.app' -type d 2>/dev/null | head -1)" ]; then
-            echo "::error::xcodebuild succeeded but produced no .app"
-            echo "--- tail of full xcodebuild.log ---"
+            echo "::error::xcodebuild rc=0 but produced no .app"
             tail -50 xcodebuild.log
-            echo "--- error/fatal lines ---"
-            grep -E "error:|FAILED|fatal" xcodebuild.log | tail -30
             exit 1
           fi
           echo "Built: $(find derived -name '*.app' -type d 2>/dev/null | head -1)"
