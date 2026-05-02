@@ -44,6 +44,16 @@ pre-commit:
       glob: '.github/workflows/*.{yml,yaml}'
       run: bash scripts/dev/lint-ci-masks.sh {staged_files}
 
+    maestro-lint:
+      # Lints e2e/flows/*.yaml for the 3 Maestro authoring anti-patterns
+      # we paid for during the explorer-cloud tour journey:
+      # - id+text combined selector (run 25256670364)
+      # - inputText not followed by hideKeyboard (run 25257379093)
+      # - ${output.X} reference without prior runFlow defining X
+      # See ~/.claude/skills/maestro-rn-flow-author/SKILL.md for fixes.
+      glob: 'e2e/flows/*.{yml,yaml}'
+      run: bash scripts/dev/maestro-flow-lint.sh {staged_files}
+
 pre-push:
   parallel: false # cheapest first so we fail fast
   commands:

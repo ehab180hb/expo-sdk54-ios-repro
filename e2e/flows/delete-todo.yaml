@@ -4,27 +4,24 @@ appId: io.example.expoSdk54Todo
 - launchApp
 
 - tapOn:
-    id: "add-todo-input"
-- inputText: "delete me"
+    id: 'add-todo-input'
+- inputText: 'delete me'
 - tapOn:
-    id: "add-todo-submit"
+    id: 'add-todo-submit'
 
-- assertVisible: "delete me"
+- assertVisible: 'delete me'
 
-# Swipe the row from right to reveal the Delete action
+# Swipe the row from right to reveal the Delete action.
+# Earlier draft tried `id: "todo-text-${output.todoId}"` but that
+# requires a prior `runFlow` that defines `output.todoId`, which we
+# never had. Caught by maestro-flow-lint.sh. Use the visible text
+# as the swipe anchor — there's only one row at this point.
 - swipe:
-    from:
-      id: "todo-text-${output.todoId}"
-    direction: LEFT
-    duration: 400
-
-# (Maestro can't capture the dynamic id; use a generic swipe by text instead.)
-- swipe:
-    from: "delete me"
+    from: 'delete me'
     direction: LEFT
 
-- tapOn: "Delete"
+- tapOn: 'Delete'
 
-- assertNotVisible: "delete me"
+- assertNotVisible: 'delete me'
 - assertVisible:
-    id: "empty-state"
+    id: 'empty-state'
