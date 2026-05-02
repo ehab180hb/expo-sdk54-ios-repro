@@ -7,7 +7,9 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?|react-clone-referenced-element|@react-navigation|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-unistyles|react-native-reanimated|react-native-worklets|react-native-gesture-handler|react-native-edge-to-edge|react-native-nitro-modules|@react-native-async-storage/async-storage))',
   ],
   setupFiles: ['<rootDir>/jest.setup.ts'],
-  setupFilesAfterEach: ['@testing-library/react-native/extend-expect'],
+  // @testing-library/react-native v13+ ships matchers as part of the
+  // library — no explicit extend-expect call needed. (Older versions
+  // required setupFilesAfterEach, which isn't a real Jest option anyway.)
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
