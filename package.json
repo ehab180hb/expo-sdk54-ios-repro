@@ -47,5 +47,17 @@
     "prettier": "^3.4.2",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "expo-build-properties",
+        "expo-haptics",
+        "expo-secure-store",
+        "expo-web-browser",
+        "@react-native-async-storage/async-storage",
+        "react-native-safe-area-context"
+      ]
+    }
   }
 }

@@ -67,13 +67,14 @@ pre-push:
       # SDK matrix. Catches iters #11 (missing assets/icon.png) and
       # #13 (rn-safe-area-context off-matrix).
       #
-      # ADVISORY: trailing `|| echo` makes this warn-only — some
-      # version mismatches are deliberate (e.g. rn-safe-area-context
-      # bumped to 5.4 against the matrix's ~5.6 because we needed
-      # the RN 0.81 yoga fix earlier than Expo's matrix landed it).
-      # Failing the gate on those would push us back to the bad
-      # version. The CI workflows still run expo-doctor strictly.
-      run: npx --yes expo-doctor || echo "::warning::expo-doctor flagged issues (advisory)"
+      # BLOCKING (Plan 4 T4.1.C). Intentional drifts are listed in
+      # `expo.install.exclude` in package.json with rationale in
+      # `docs/DEPENDENCIES.md`. Any NEW drift outside that allowlist
+      # fails the push — the false-negative cost (silent dep drift
+      # → 16 min CI cycles wasted on yoga incompat) is higher than
+      # the false-positive cost (one allowlist edit per intended
+      # drift).
+      run: npx --yes expo-doctor
 
     actionlint:
       # Lints workflow YAML for shell-script bugs. Pre-push because

@@ -10,7 +10,7 @@
       "bundleIdentifier": "io.example.expoSdk54Todo",
       "supportsTablet": true
     },
-    "scheme": "expoSdk54Todo",
+    "scheme": "exposdk54todo",
     "plugins": [
       "expo-secure-store",
       "expo-web-browser",
