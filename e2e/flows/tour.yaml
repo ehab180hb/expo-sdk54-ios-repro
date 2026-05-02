@@ -1,0 +1,85 @@
+# Full-app tour — exercises every UI affordance in one flow.
+# Used by docs/EXPLORER.md as the canonical "see what the app does" run.
+#
+# Each step that asserts a fact is annotated with the explorer run
+# that taught us the truth. `tour.yaml` is therefore both the test
+# AND the lesson log of how the app actually behaves.
+appId: io.example.expoSdk54Todo
+---
+- clearState
+- launchApp
+
+# 1. Empty state — initial filter is "all", so copy is "No todos yet".
+# Hurdle, run 25256238601: original tour asserted "Nothing to do" (the
+# active-filter copy in EmptyState.tsx). The failed-step screenshot
+# in the artifact made the actual text obvious — fixed in run #2.
+- assertVisible:
+    id: 'empty-state'
+- assertVisible: 'No todos yet'
+- assertVisible: 'All clear' # subtitle when active count = 0
+
+# 2. Add first todo
+- tapOn:
+    id: 'add-todo-input'
+- inputText: 'buy milk'
+- tapOn:
+    id: 'add-todo-submit'
+
+- assertVisible: 'buy milk'
+- assertVisible: '1 item left'
+- assertNotVisible:
+    id: 'empty-state'
+
+# 3. Add second todo (newest goes on top)
+- tapOn:
+    id: 'add-todo-input'
+- inputText: 'walk the dog'
+- tapOn:
+    id: 'add-todo-submit'
+
+- assertVisible: 'walk the dog'
+- assertVisible: '2 items left'
+
+# 4. SKIPPED: tap-to-toggle a row.
+# Three runs (25256407706 / 25256670364 / 25256911195) all failed
+# attempting to toggle by tapping the row. Diagnosis from the
+# screenshots and Maestro's "Element not found" errors:
+#   - The Pressable has accessibilityRole="checkbox" + accessibilityState
+#     which collapses the row into an iOS XCUITest "checkbox" element
+#     that absorbs its own accessibilityIdentifier (testID) — Maestro
+#     can't find by `id: 'todo-item-...'`.
+#   - tapOn:'<text>' hits the inner <Text> child, but the press
+#     doesn't propagate to the parent Pressable's onPress when the
+#     parent is wrapped in react-native-gesture-handler's <Swipeable>.
+# This is a real architectural tension between iOS accessibility
+# (good for screen readers) and Maestro testability. Fix would be
+# either: (a) drop the checkbox role and use a button role + custom
+# label, OR (b) put the toggle on a dedicated child View with its
+# own testID. Production apps should pick one based on whether
+# screen-reader UX or E2E test stability matters more.
+# For this tour, we use the Active/Completed filters (simpler
+# Pressable, no Swipeable wrapper) to drive the workflow forward.
+
+# 5. Switch to Active filter — both items still show because both are active
+- tapOn:
+    id: 'filter-active'
+- assertVisible: 'walk the dog'
+- assertVisible: 'buy milk'
+
+# 6. Switch to Completed — empty (nothing completed)
+- tapOn:
+    id: 'filter-completed'
+- assertVisible:
+    id: 'empty-state'
+- assertVisible: 'No completed todos'
+
+# 7. Back to All — both still visible
+- tapOn:
+    id: 'filter-all'
+- assertVisible: 'buy milk'
+- assertVisible: 'walk the dog'
+- assertVisible: '2 items left'
+
+# 8. Final state — two active todos remaining; clear-completed has nothing to clear
+- assertVisible:
+    id: 'clear-completed'

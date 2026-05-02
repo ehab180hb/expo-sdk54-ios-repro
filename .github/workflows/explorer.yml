@@ -113,6 +113,10 @@ jobs:
           # into a heredoc would break on EOF in the input.
           FLOW_CONTENT: ${{ inputs.flow }}
           RECORD_VIDEO: ${{ inputs.record_video }}
+          # GHA macos-15 sims occasionally take >60s for the XCTest
+          # driver to come up — bumping prevents flaky "iOS driver not
+          # ready in time" failures (caught on explorer run 25257165436).
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '180000'
         run: |
           export PATH="$HOME/.maestro/bin:$PATH"
           mkdir -p artifacts

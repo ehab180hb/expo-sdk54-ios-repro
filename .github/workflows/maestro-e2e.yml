@@ -95,7 +95,24 @@ jobs:
       - name: Run Maestro flows
         run: |
           export PATH="$HOME/.maestro/bin:$PATH"
-          maestro test e2e/flows/ --format junit --output maestro-report.xml || true
+          # The original form was `maestro test ... || true` — same
+          # anti-pattern as the xcodebuild masking we fixed in
+          # ios-build-cached.yml. It made the workflow green even
+          # when 3/4 flows failed (verified on run 25254367321:
+          # complete-todo + delete-todo + persistence all silently
+          # failing). Now: capture the RC, surface artifacts, and
+          # let the workflow fail if Maestro itself failed.
+          set +e
+          maestro test e2e/flows/ --format junit --output maestro-report.xml
+          MAESTRO_RC=$?
+          set -e
+          echo "::notice::maestro exit code = $MAESTRO_RC"
+          if [ "$MAESTRO_RC" != "0" ]; then
+            echo "::error::One or more Maestro flows failed (RC=$MAESTRO_RC). See maestro-report.xml in the artifact."
+            # Don't `exit $MAESTRO_RC` yet — let the upload step run.
+            # The final `exit` is after the upload (see step ordering).
+            echo "MAESTRO_RC=$MAESTRO_RC" >> $GITHUB_ENV
+          fi
 
       - name: Upload report + recordings
         if: always()
@@ -107,3 +124,9 @@ jobs:
             ~/.maestro/tests/**/*.png
             ~/.maestro/tests/**/*.mp4
           retention-days: 14
+
+      - name: Fail if Maestro flows failed
+        if: env.MAESTRO_RC != '' && env.MAESTRO_RC != '0'
+        run: |
+          echo "::error::Maestro flows failed (RC=$MAESTRO_RC) — see uploaded maestro-e2e artifact for the JUnit report and per-flow screenshots."
+          exit "$MAESTRO_RC"
