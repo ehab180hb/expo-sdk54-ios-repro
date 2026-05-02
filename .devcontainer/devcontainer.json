@@ -1,0 +1,40 @@
+{
+  "name": "expo-sdk54-todo (Linux dev)",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "target": "dev"
+  },
+  "workspaceFolder": "/app",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=cached",
+  "remoteUser": "node",
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CI": "false"
+  },
+  "forwardPorts": [8081, 19000, 19001, 19002],
+  "portsAttributes": {
+    "8081": { "label": "Metro bundler" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "Orta.vscode-jest",
+        "ms-azuretools.vscode-docker",
+        "yoavbls.pretty-ts-errors"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "jest.autoRun": "watch",
+        "jest.runMode": "watch"
+      }
+    }
+  },
+  "postCreateCommand": "npm install --legacy-peer-deps && echo 'Container ready. Run: npm run test:watch'",
+  "postAttachCommand": {
+    "tests": "npm run test:watch"
+  }
+}

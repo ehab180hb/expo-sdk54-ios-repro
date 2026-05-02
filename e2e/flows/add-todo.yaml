@@ -1,0 +1,32 @@
+appId: io.example.expoSdk54Todo
+---
+- clearState
+- launchApp
+- assertVisible:
+    id: "empty-state"
+
+- tapOn:
+    id: "add-todo-input"
+- inputText: "buy milk"
+- tapOn:
+    id: "add-todo-submit"
+
+- assertVisible:
+    id: "todo-list"
+- assertVisible: "buy milk"
+- assertNotVisible:
+    id: "empty-state"
+
+# Counter should now show "1 item left"
+- assertVisible: "1 item left"
+
+# Adding a second todo should put it on top
+- tapOn:
+    id: "add-todo-input"
+- inputText: "walk dog"
+- tapOn:
+    id: "add-todo-submit"
+
+- assertVisible: "walk dog"
+- assertVisible: "buy milk"
+- assertVisible: "2 items left"

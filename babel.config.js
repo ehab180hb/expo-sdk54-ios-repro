@@ -1,0 +1,11 @@
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: [
+      // react-native-worklets/plugin MUST be last — it transforms output
+      // from other plugins (reanimated worklets, jsx, etc.).
+      'react-native-worklets/plugin',
+    ],
+  };
+};

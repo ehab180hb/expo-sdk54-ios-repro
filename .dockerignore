@@ -1,0 +1,17 @@
+# Don't COPY these into the image — they're either huge, unnecessary,
+# or would break the cache on every change.
+node_modules/
+.expo/
+ios/
+android/
+dist/
+build/
+coverage/
+.git/
+.github/
+*.log
+.DS_Store
+.vscode/
+.idea/
+docs/
+__tests__/snapshots/

@@ -1,0 +1,21 @@
+appId: io.example.expoSdk54Todo
+---
+# Verifies AsyncStorage round-tripping: kill the app, restart, todos
+# should be back. Catches a regression of zustand-persist hydration.
+
+- clearState
+- launchApp
+
+- tapOn:
+    id: "add-todo-input"
+- inputText: "persist me"
+- tapOn:
+    id: "add-todo-submit"
+- assertVisible: "persist me"
+
+- stopApp
+- launchApp
+
+# Without clearState — the persisted state should rehydrate
+- assertVisible: "persist me"
+- assertVisible: "1 item left"

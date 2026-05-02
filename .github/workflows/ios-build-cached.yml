@@ -1,0 +1,165 @@
+name: iOS Sim Build (cached)
+
+# Production build verifier. Cold builds are 12+ minutes; with caches
+# warm, subsequent builds are 2-4 minutes. Caches:
+#  - node_modules (npm cache)
+#  - ios/Pods (CocoaPods)
+#  - ios/derived (Xcode DerivedData)
+#  - ~/Library/Caches/CocoaPods (CocoaPods global cache)
+#
+# This is the "real iteration loop" workflow once the dep stack is stable.
+# For a from-scratch dep-stack regression test, see test-min-repro.yml.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'app.json'
+      - 'babel.config.js'
+      - 'tsconfig.json'
+      - 'src/**'
+      - 'index.ts'
+      - 'App.tsx'
+      - '.github/workflows/ios-build-cached.yml'
+  workflow_dispatch:
+    inputs:
+      capture_seconds:
+        description: 'Seconds to keep app running before screenshot'
+        required: false
+        default: '30'
+        type: string
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ios/derived
+          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-derived-
+
+      - name: Expo prebuild + pod install
+        run: |
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install --repo-update 2>&1 | tee pod-install.log | tail -50
+
+      - name: Xcodebuild Release
+        run: |
+          set -o pipefail
+          cd ios
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          SCHEME="exposdk54todo"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath ./derived \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            build \
+            2>&1 | tee xcodebuild.log \
+                 | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |BUILD)' \
+                 || true
+          XCB_RC=${PIPESTATUS[0]}
+          [ "$XCB_RC" = "0" ] || { tail -100 xcodebuild.log; exit 1; }
+          [ -n "$(find derived -name '*.app' -type d 2>/dev/null | head -1)" ] \
+            || { echo "::error::no .app produced"; exit 1; }
+
+      - name: Boot simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 1[5-9] Pro" \
+                   | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+
+      - name: Codesign + install + launch
+        run: |
+          cd ios
+          APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
+          /usr/bin/codesign --force --sign - --deep "$APP"
+          xcrun simctl install "$DEVICE" "$APP"
+
+          xcrun simctl spawn "$DEVICE" log stream \
+            --level debug --style syslog \
+            --predicate 'process == "exposdk54todo" OR eventMessage CONTAINS "exposdk54todo" OR eventMessage CONTAINS "io.example.expoSdk54Todo"' \
+            > /tmp/full-log-stream.txt 2>&1 &
+          LOG_PID=$!
+          sleep 2
+
+          xcrun simctl launch --console-pty --terminate-running-process \
+            "$DEVICE" "io.example.expoSdk54Todo" \
+            > /tmp/launch-console.txt 2>&1 &
+          LPID=$!
+
+          sleep ${{ inputs.capture_seconds || 30 }}
+          kill $LPID $LOG_PID 2>/dev/null || true
+
+      - name: Screenshot
+        if: always()
+        run: |
+          xcrun simctl io "$DEVICE" screenshot /tmp/screenshot.png || true
+
+      - name: Stage .app for fast-path cache
+        if: success()
+        run: |
+          mkdir -p pre-built-app
+          APP=$(find ios/derived -name "*.app" -type d -maxdepth 8 | head -1)
+          cp -R "$APP" pre-built-app/
+
+      - name: Save .app to fast-path cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: pre-built-app/
+          # Same key shape js-only-fast.yml expects (NATIVE inputs only).
+          # When this workflow finishes successfully, the next js-only-fast
+          # PR run will be a cache hit and complete in ~90 seconds.
+          key: pre-built-app-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js') }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-cached
+          path: |
+            /tmp/launch-console.txt
+            /tmp/full-log-stream.txt
+            /tmp/screenshot.png
+            ios/xcodebuild.log
+            ios/pod-install.log
+          retention-days: 14

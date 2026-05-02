@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "expo-sdk54-todo",
+    "slug": "expo-sdk54-todo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "io.example.expoSdk54Todo",
+      "supportsTablet": true
+    },
+    "scheme": "expoSdk54Todo",
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ]
+    ]
+  }
+}

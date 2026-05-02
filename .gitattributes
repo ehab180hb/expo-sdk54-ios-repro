@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# Force LF on files runners execute or parse — Windows checkout would
+# otherwise produce CRLF that breaks bash and YAML.
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf

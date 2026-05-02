@@ -1,0 +1,137 @@
+name: JS-Only Fast Path
+
+# The killer optimization for "JS changed, native didn't" iteration.
+#
+# Idea: a previously-built .app is stable as long as package-lock.json,
+# app.json, babel.config.js, and ios/ haven't changed. For pure JS
+# changes (src/**/*.tsx, src/**/*.ts, App.tsx, index.ts), we can:
+#   1. Restore the cached .app
+#   2. Bundle ONLY the new JS via `expo export:embed` (~30s)
+#   3. Replace main.jsbundle inside the .app
+#   4. Re-codesign + install + Maestro smoke flow
+#
+# Total wall-clock: ~90 seconds vs ~3-5min for a full warm build.
+#
+# The cache key is hashed on NATIVE inputs only, so JS changes never
+# invalidate it. Updating any native input (package-lock, app.json,
+# babel.config.js) requires a full build — kicked off by the
+# `ios-build-cached.yml` workflow which seeds the cache.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'App.tsx'
+      - 'index.ts'
+      - '__tests__/**'
+      - 'e2e/**'
+      - '.github/workflows/js-only-fast.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: js-only-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-path:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Restore pre-built .app from cache
+        id: app-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: pre-built-app/
+          # Hash on NATIVE inputs only. JS changes never invalidate.
+          key: pre-built-app-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js') }}
+          restore-keys: |
+            pre-built-app-${{ runner.os }}-
+
+      - name: Fall back to full build if cache miss
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::warning::No cached .app for this native-config hash."
+          echo "::warning::A full ios-build-cached.yml run is needed first to seed the cache."
+          echo "::warning::Triggering ios-build-cached.yml now..."
+          gh workflow run ios-build-cached.yml
+          exit 78  # Neutral exit — don't fail the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bundle the new JS
+        if: steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          set -o pipefail
+          mkdir -p bundle-out/assets
+          npx expo export:embed \
+            --entry-file index.ts \
+            --platform ios \
+            --dev false \
+            --reset-cache \
+            --bundle-output bundle-out/main.jsbundle \
+            --assets-dest bundle-out/assets \
+            --config-cmd "$(which node) $(npm root)/react-native/cli.js config"
+
+          [ -f bundle-out/main.jsbundle ] || { echo "::error::No bundle produced"; exit 1; }
+          du -h bundle-out/main.jsbundle
+
+      - name: Inject bundle into cached .app + re-sign
+        if: steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          [ -d "$APP" ] || { echo "::error::no .app in restored cache"; exit 1; }
+
+          # Replace the bundle + assets in-place
+          cp bundle-out/main.jsbundle "$APP/main.jsbundle"
+          if [ -d bundle-out/assets ]; then
+            cp -r bundle-out/assets/. "$APP/" || true
+          fi
+
+          # Re-sign — codesign hashes file contents, so changing
+          # main.jsbundle invalidates the existing signature.
+          /usr/bin/codesign --force --sign - --deep "$APP"
+          /usr/bin/codesign --verify --verbose=2 "$APP"
+
+      - name: Boot sim + install patched .app
+        if: steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 1[5-9] Pro" \
+                   | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+
+      - name: Maestro smoke
+        if: steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          export PATH="$HOME/.maestro/bin:$PATH"
+          maestro test e2e/flows/add-todo.yaml
+
+      - name: Capture screenshot
+        if: always() && steps.app-cache.outputs.cache-hit == 'true'
+        run: |
+          xcrun simctl io "$DEVICE" screenshot /tmp/screenshot.png || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-only-fast
+          path: |
+            /tmp/screenshot.png
+            bundle-out/main.jsbundle
+          retention-days: 7

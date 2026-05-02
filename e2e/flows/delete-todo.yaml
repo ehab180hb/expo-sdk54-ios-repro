@@ -1,0 +1,30 @@
+appId: io.example.expoSdk54Todo
+---
+- clearState
+- launchApp
+
+- tapOn:
+    id: "add-todo-input"
+- inputText: "delete me"
+- tapOn:
+    id: "add-todo-submit"
+
+- assertVisible: "delete me"
+
+# Swipe the row from right to reveal the Delete action
+- swipe:
+    from:
+      id: "todo-text-${output.todoId}"
+    direction: LEFT
+    duration: 400
+
+# (Maestro can't capture the dynamic id; use a generic swipe by text instead.)
+- swipe:
+    from: "delete me"
+    direction: LEFT
+
+- tapOn: "Delete"
+
+- assertNotVisible: "delete me"
+- assertVisible:
+    id: "empty-state"

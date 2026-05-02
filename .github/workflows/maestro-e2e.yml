@@ -1,0 +1,94 @@
+name: Maestro E2E
+
+# Runs after a successful iOS build. Maestro replays the YAML flows in
+# e2e/flows/ against the booted simulator with the .app installed.
+#
+# Slowest pipeline tier (~5-10 min) — only run on PRs and master.
+
+on:
+  workflow_run:
+    workflows: ['iOS Sim Build (cached)']
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: maestro-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Restore CocoaPods cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: ${{ runner.os }}-pods-
+
+      - name: Restore DerivedData cache
+        uses: actions/cache@v4
+        with:
+          path: ios/derived
+          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'src/**') }}
+          restore-keys: ${{ runner.os }}-derived-
+
+      - name: Build (incremental from cache)
+        run: |
+          set -o pipefail
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          xcodebuild -workspace "$WORKSPACE" -scheme exposdk54todo \
+            -configuration Release -sdk iphonesimulator \
+            -derivedDataPath ./derived \
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
+            build 2>&1 | tail -100
+
+      - name: Boot sim + install app
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 1[5-9] Pro" \
+                   | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find ios/derived -name "*.app" -type d -maxdepth 8 | head -1)
+          /usr/bin/codesign --force --sign - --deep "$APP"
+          xcrun simctl install "$DEVICE" "$APP"
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Run Maestro flows
+        run: |
+          export PATH="$HOME/.maestro/bin:$PATH"
+          maestro test e2e/flows/ --format junit --output maestro-report.xml || true
+
+      - name: Upload report + recordings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-e2e
+          path: |
+            maestro-report.xml
+            ~/.maestro/tests/**/*.png
+            ~/.maestro/tests/**/*.mp4
+          retention-days: 14

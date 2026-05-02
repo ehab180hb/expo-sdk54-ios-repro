@@ -1,0 +1,35 @@
+appId: io.example.expoSdk54Todo
+---
+- clearState
+- launchApp
+
+- tapOn:
+    id: "add-todo-input"
+- inputText: "buy milk"
+- tapOn:
+    id: "add-todo-submit"
+
+# Tap the row to toggle complete
+- tapOn: "buy milk"
+
+# Counter should now show "All clear"
+- assertVisible: "All clear"
+
+# Completed filter should still show it; Active filter should not
+- tapOn:
+    id: "filter-completed"
+- assertVisible: "buy milk"
+
+- tapOn:
+    id: "filter-active"
+- assertVisible:
+    id: "empty-state"
+- assertVisible: "Nothing to do"
+
+# Clear-completed sweep
+- tapOn:
+    id: "filter-all"
+- tapOn:
+    id: "clear-completed"
+- assertVisible:
+    id: "empty-state"

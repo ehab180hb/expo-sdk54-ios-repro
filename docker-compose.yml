@@ -1,0 +1,60 @@
+# Local Docker setup for fast Linux-side iteration. See docs/DOCKER.md.
+#
+# Services:
+#   dev   — interactive shell + Jest watch (default)
+#   test  — one-shot `npm test` (for CI parity locally via `act`)
+#   typecheck — one-shot `npm run typecheck`
+#   metro — Metro bundler exposed on host:8081 (sim on host can connect)
+#
+# Volume strategy: source is bind-mounted; node_modules is a NAMED
+# volume so the host's (often broken-on-Windows) node_modules doesn't
+# shadow the image's working node_modules. This is the canonical
+# Node-in-Docker pattern that keeps native module .so files matched
+# to the container's libc.
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    image: expo-sdk54-todo-dev:latest
+    init: true
+    tty: true
+    stdin_open: true
+    working_dir: /app
+    volumes:
+      - .:/app:cached            # source — host edits visible to container
+      - node_modules:/app/node_modules  # named vol — container's node_modules wins
+    command: ["bash"]
+
+  test:
+    extends: dev
+    command: ["npm", "test"]
+    tty: false
+    stdin_open: false
+
+  test-watch:
+    extends: dev
+    command: ["npm", "run", "test:watch"]
+
+  typecheck:
+    extends: dev
+    command: ["npm", "run", "typecheck"]
+    tty: false
+    stdin_open: false
+
+  metro:
+    extends: dev
+    # Metro's terminal UI works fine over the bind mount; expose the
+    # bundler port so a sim running on the host can connect via
+    # `EXPO_USE_DEV_CLIENT=1` + LAN url.
+    command: ["npx", "expo", "start", "--port", "8081", "--host", "lan"]
+    ports:
+      - "8081:8081"
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+
+volumes:
+  node_modules:
