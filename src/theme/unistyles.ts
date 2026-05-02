@@ -33,11 +33,13 @@ declare module 'react-native-unistyles' {
   export interface UnistylesBreakpoints extends AppBreakpoints {}
 }
 
+// When adaptiveThemes is true, unistyles picks the theme from the
+// system color scheme automatically — `initialTheme` is mutually
+// exclusive with this and would cause a type error if both are set.
 StyleSheet.configure({
   themes,
   breakpoints,
   settings: {
-    initialTheme: 'light',
     adaptiveThemes: true,
   },
 });
