@@ -1,0 +1,167 @@
+name: Explorer Batch (multiple flows on one sim boot)
+
+# Plan 4 T4.4.E — pre-warmed sim session pattern.
+#
+# explorer.yml runs ONE flow per workflow_dispatch (5 min round-trip).
+# explorer-batch.yml runs MANY flows against the SAME booted sim,
+# amortizing the boot + .app install cost across the batch.
+#
+# Use this when iterating on a sequence of related flows (e.g. tour
+# variations, regression suite). Per-flow cost: ~30s after the first.
+#
+# Inputs:
+#   flows  — newline-separated paths to YAML flows in e2e/flows/
+#            OR a glob like "e2e/flows/*.yaml"
+#
+# Output: an artifact with one subdir per flow containing screenshots,
+# hierarchy, and the JUnit report.
+
+on:
+  workflow_dispatch:
+    inputs:
+      flows:
+        description: 'Newline-separated flow paths OR a glob (e.g. e2e/flows/*.yaml)'
+        required: true
+        type: string
+        default: 'e2e/flows/*.yaml'
+
+concurrency:
+  group: explorer-batch-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Restore pre-built .app from cache
+        id: app-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: pre-built-app/
+          key: pre-built-app-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js') }}
+          restore-keys: |
+            pre-built-app-${{ runner.os }}-
+
+      - name: Fail if no cached .app
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::error::No cached .app for this native config."
+          echo "::error::Run ios-build-cached.yml first to seed the cache."
+          exit 1
+
+      - name: Bundle current JS into the cached .app
+        run: |
+          set -o pipefail
+          mkdir -p bundle-out/assets
+          npx expo export:embed \
+            --entry-file index.ts \
+            --platform ios \
+            --dev false \
+            --reset-cache \
+            --bundle-output bundle-out/main.jsbundle \
+            --assets-dest bundle-out/assets \
+            --config-cmd "$(which node) $(npm root)/react-native/cli.js config"
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          [ -d "$APP" ] || { echo "::error::no .app in restored cache"; exit 1; }
+          cp bundle-out/main.jsbundle "$APP/main.jsbundle"
+          if [ -d bundle-out/assets ]; then
+            cp -r bundle-out/assets/. "$APP/" || true
+          fi
+          /usr/bin/codesign --force --sign - --deep "$APP"
+
+      - name: Boot sim + install (ONCE — reused for every flow)
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 1[5-9] Pro" \
+                   | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "DEVICE=$DEVICE" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find pre-built-app -name "*.app" -type d -maxdepth 3 | head -1)
+          xcrun simctl install "$DEVICE" "$APP"
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Resolve flow list
+        id: resolve
+        env:
+          FLOWS_INPUT: ${{ inputs.flows }}
+        run: |
+          # Treat input as either a glob or a newline list. Expand
+          # globs via `compgen -G` (works in bash). Skip empties.
+          mapfile -t lines <<< "$FLOWS_INPUT"
+          declare -a paths
+          for ln in "${lines[@]}"; do
+            ln="${ln#"${ln%%[![:space:]]*}"}" # ltrim
+            ln="${ln%"${ln##*[![:space:]]}"}" # rtrim
+            [ -z "$ln" ] && continue
+            if [[ "$ln" == *"*"* || "$ln" == *"?"* || "$ln" == *"["* ]]; then
+              # advisory: compgen returns 1 when the glob doesn't match — that's not a failure here, it just means no flows for this pattern.
+              while IFS= read -r f; do paths+=("$f"); done < <(compgen -G "$ln" || true)
+            else
+              paths+=("$ln")
+            fi
+          done
+          if [ "${#paths[@]}" -eq 0 ]; then
+            echo "::error::no flow paths resolved from input"
+            exit 1
+          fi
+          printf '%s\n' "${paths[@]}" > /tmp/flows-list.txt
+          echo "Resolved $(wc -l < /tmp/flows-list.txt) flow(s):"
+          cat /tmp/flows-list.txt
+
+      - name: Run flows in sequence (re-using the same sim)
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '180000'
+        run: |
+          export PATH="$HOME/.maestro/bin:$PATH"
+          mkdir -p artifacts
+          BATCH_RC=0
+          while IFS= read -r flow; do
+            flowname=$(basename "$flow" .yaml)
+            outdir="artifacts/$flowname"
+            mkdir -p "$outdir"
+            echo "::group::flow: $flow"
+            set +e
+            maestro test \
+              --test-output-dir="$outdir" \
+              --debug-output="$outdir" \
+              --format junit \
+              --output "$outdir/report.xml" \
+              "$flow"
+            rc=$?
+            set -e
+            echo "::notice::flow $flow rc=$rc"
+            if [ "$rc" != "0" ]; then
+              BATCH_RC=$rc
+            fi
+            echo "::endgroup::"
+          done < /tmp/flows-list.txt
+          echo "BATCH_RC=$BATCH_RC" >> $GITHUB_ENV
+
+      - name: Upload batch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: explorer-batch-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+
+      - name: Fail if any flow failed
+        if: env.BATCH_RC != '' && env.BATCH_RC != '0'
+        run: |
+          echo "::error::At least one flow in the batch failed (RC=$BATCH_RC). See artifact for per-flow JUnit + screenshots."
+          exit "$BATCH_RC"

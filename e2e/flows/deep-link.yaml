@@ -1,0 +1,50 @@
+# Deep-link flow — Plan 4 T4.2.C.
+#
+# Verifies the scheme:`exposdk54todo://filter/active` route sets
+# the active filter when the app is launched via that URL.
+#
+# Maestro's `openLink:` action invokes the iOS Simulator's deep-link
+# handler, which fires the same code path as a real user tapping
+# the link from another app.
+
+appId: io.example.expoSdk54Todo
+---
+- clearState
+- launchApp
+
+# Seed: add one active todo + one completed
+- tapOn:
+    id: 'add-todo-input'
+- inputText: 'walk dog'
+- hideKeyboard
+- tapOn:
+    id: 'add-todo-submit'
+
+- tapOn:
+    id: 'add-todo-input'
+- inputText: 'buy milk'
+- hideKeyboard
+- tapOn:
+    id: 'add-todo-submit'
+
+# Toggle the second one complete (newest is on top per add-todo flow).
+# Use the tour-flow's verified pattern: tap the row's testID with regex.
+- tapOn:
+    id: 'todo-item-'
+    index: 0
+
+# Both filters worth — start at "all" (default)
+- tapOn:
+    id: 'filter-all'
+- assertVisible: 'walk dog'
+- assertVisible: 'buy milk'
+
+# Now hit the deep link to filter=active. The completed one should drop.
+- openLink: 'exposdk54todo://filter/active'
+- assertVisible: 'walk dog'
+- assertNotVisible: 'buy milk'
+
+# And the other direction
+- openLink: 'exposdk54todo://filter/completed'
+- assertVisible: 'buy milk'
+- assertNotVisible: 'walk dog'

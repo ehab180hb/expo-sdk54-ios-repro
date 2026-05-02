@@ -114,6 +114,33 @@ jobs:
             echo "MAESTRO_RC=$MAESTRO_RC" >> $GITHUB_ENV
           fi
 
+      - name: Hermes crash canary
+        # Plan 4 T4.3.J. Greps the simulator's syslog for any
+        # Hermes runtime exceptions surfaced during E2E. Hermes
+        # ABI mismatches (bytecode vs runtime) don't fail the JS
+        # bundler — they only show up at runtime. Catching them
+        # here saves the "tests passed but app crashed on first
+        # launch in TestFlight" loop.
+        if: always()
+        run: |
+          if [ -z "${DEVICE:-}" ]; then
+            echo "::warning::DEVICE unset — skipping Hermes canary"
+            exit 0
+          fi
+          # Pull last ~5 min of process logs and grep. simctl spawn
+          # log may produce zero output if no matching events
+          # occurred — failure here is informational, not a gate.
+          xcrun simctl spawn "$DEVICE" log show --last 5m --style compact \
+            --predicate 'process == "exposdk54todo" OR eventMessage CONTAINS "Hermes" OR eventMessage CONTAINS "JSError"' \
+            > /tmp/hermes-canary.txt 2>&1 \
+            || true # advisory: see comment above
+          if grep -E "HermesNativeCrash|HermesCompilationError|hermesInternal.*Error|Uncaught.*Error" /tmp/hermes-canary.txt > /tmp/hermes-hits.txt; then
+            echo "::error::Hermes runtime exception detected during E2E"
+            cat /tmp/hermes-hits.txt
+            exit 1
+          fi
+          echo "✓ no Hermes exceptions surfaced"
+
       - name: Upload report + recordings
         if: always()
         uses: actions/upload-artifact@v4
@@ -123,6 +150,8 @@ jobs:
             maestro-report.xml
             ~/.maestro/tests/**/*.png
             ~/.maestro/tests/**/*.mp4
+            /tmp/hermes-canary.txt
+            /tmp/hermes-hits.txt
           retention-days: 14
 
       - name: Fail if Maestro flows failed
