@@ -81,6 +81,12 @@ jobs:
           cd ios
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
           SCHEME="exposdk54todo"
+          # Two-step: tee to log, then grep separately. The previous form
+          # was `tee | grep || true` — but `|| true` swallows the pipefail
+          # signal AND resets PIPESTATUS, so xcodebuild errors got masked.
+          # The new form runs xcodebuild→tee as one pipeline whose exit
+          # code IS xcodebuild's RC (via pipefail), then runs grep on the
+          # log file as a separate non-failing operation.
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -91,11 +97,15 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             build \
-            2>&1 | tee xcodebuild.log \
-                 | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |BUILD)' \
-                 || true
+            2>&1 | tee xcodebuild.log
           XCB_RC=${PIPESTATUS[0]}
-          [ "$XCB_RC" = "0" ] || { tail -100 xcodebuild.log; exit 1; }
+          # Surface the most useful lines for the workflow log.
+          grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |BUILD)' xcodebuild.log | tail -100 || true
+          if [ "$XCB_RC" != "0" ]; then
+            echo "::error::xcodebuild rc=$XCB_RC"
+            grep -E "error:|FAILED|fatal" xcodebuild.log | tail -50
+            exit 1
+          fi
           [ -n "$(find derived -name '*.app' -type d 2>/dev/null | head -1)" ] \
             || { echo "::error::no .app produced"; exit 1; }
 
