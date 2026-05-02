@@ -34,6 +34,16 @@ pre-commit:
       glob: '{src,__tests__}/**/*.{ts,tsx}'
       run: npx jest --bail --findRelatedTests {staged_files} --passWithNoTests
 
+    ci-masks:
+      # Project-specific masking-pattern detector. actionlint covers
+      # generic shell bugs; this rule catches the SPECIFIC anti-pattern
+      # we paid for twice (xcodebuild BUILD FAILED swallowed via
+      # `tee | grep || true`, then maestro test 3/4 flows hidden via
+      # `maestro test ... || true`). Single-pass awk across the staged
+      # workflow files — runs in ~0.3s on 6 files (Windows git-bash).
+      glob: '.github/workflows/*.{yml,yaml}'
+      run: bash scripts/dev/lint-ci-masks.sh {staged_files}
+
 pre-push:
   parallel: false # cheapest first so we fail fast
   commands:
@@ -56,11 +66,8 @@ pre-push:
       run: npx --yes expo-doctor || echo "::warning::expo-doctor flagged issues (advisory)"
 
     actionlint:
-      # Lints workflow YAML for shell-script bugs (e.g.
-      # `tee | grep ... || true` masking). Catches the **Bonus**
-      # iteration where xcodebuild's BUILD FAILED was silently
-      # swallowed by the pipeline. Package: github-actionlint
-      # (npm wrapper around rhysd/actionlint Go binary).
+      # Lints workflow YAML for shell-script bugs. Pre-push because
+      # `npx --yes github-actionlint` cold-installs the Go binary
+      # (~3-5s); the cheaper bash-only lint-ci-masks runs at pre-commit.
       glob: '.github/workflows/*.{yml,yaml}'
-      # No args = auto-finds .github/workflows/ from cwd.
       run: npx --yes github-actionlint

@@ -157,9 +157,13 @@ jobs:
           # build phase actually runs (CODE_SIGNING_ALLOWED=NO suppresses
           # framework embedding for Release config — confirmed by prior
           # run dyld error: "Library not loaded: @rpath/React.framework/React").
-          # set -o pipefail above ensures xcodebuild's exit code propagates
-          # through the tee. Don't suffix with `|| true` here — that would
-          # mask "** BUILD FAILED **".
+          # Two-step (matches ios-build-cached.yml pattern):
+          # 1. xcodebuild → tee → done. RC captured via PIPESTATUS.
+          # 2. grep on the saved log file as a SEPARATE non-failing op.
+          # The previous form mixed both into `tee | grep ... || true`
+          # which made it possible (under some bash modes) for the
+          # `|| true` to intercept BEFORE PIPESTATUS captured the
+          # xcodebuild RC. lint-ci-masks.sh flagged this in our own repo.
           set -o pipefail
           xcodebuild \
             -workspace "$WORKSPACE" \
@@ -171,8 +175,10 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             build \
-            2>&1 | tee xcodebuild.log | grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |/tmp.*\.app|BUILD)' || true
+            2>&1 | tee xcodebuild.log
           XCB_RC=${PIPESTATUS[0]}
+          # Surface the most useful log lines for the workflow log.
+          grep -E '^(\*\*|error:|warning: ld|fatal|Touch |Ld |CodeSign |/tmp.*\.app|BUILD)' xcodebuild.log | tail -100 || true
           echo "xcodebuild RC=$XCB_RC"
           if [ "$XCB_RC" != "0" ]; then
             echo "::error::xcodebuild failed (rc=$XCB_RC)"
