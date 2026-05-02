@@ -57,24 +57,24 @@ expo-sdk54-ios-repro/
 
 Speed of feedback should match the speed of the bug class:
 
-| Bug class | Test layer | Cycle time |
-|---|---|---|
-| Logic in store / hooks / utils | Jest unit (`__tests__/`) | **3 sec** |
-| Component rendering / events | testing-library (`__tests__/components/`) | **5 sec** |
-| Cross-component integration, gestures, persistence | Maestro E2E (`e2e/flows/`) | **30 sec local** |
-| Native module behavior, build config | iOS sim build (`ios-build-cached.yml`) | **3 min warm CI** |
-| Dep-stack compatibility (SDK upgrade) | `test-min-repro.yml` (scaffolds from scratch) | **15 min cold CI** |
+| Bug class                                          | Test layer                                    | Cycle time         |
+| -------------------------------------------------- | --------------------------------------------- | ------------------ |
+| Logic in store / hooks / utils                     | Jest unit (`__tests__/`)                      | **3 sec**          |
+| Component rendering / events                       | testing-library (`__tests__/components/`)     | **5 sec**          |
+| Cross-component integration, gestures, persistence | Maestro E2E (`e2e/flows/`)                    | **30 sec local**   |
+| Native module behavior, build config               | iOS sim build (`ios-build-cached.yml`)        | **3 min warm CI**  |
+| Dep-stack compatibility (SDK upgrade)              | `test-min-repro.yml` (scaffolds from scratch) | **15 min cold CI** |
 
 Always start at the cheapest layer that can possibly catch the bug. See [`docs/ITERATION_LOOP.md`](docs/ITERATION_LOOP.md) for the detailed workflow.
 
 ## Workflows
 
-| Workflow | Triggers | What it asserts | Where artifacts go |
-|---|---|---|---|
-| `unit-tests.yml` | Every push + PR | TS compiles, Prettier passes, Jest+coverage thresholds met | `coverage/` artifact |
-| `ios-build-cached.yml` | Push to `master` (src changes) + manual | A real `.app` builds, codesigns, installs, launches, captures screenshot | `ios-build-cached` artifact |
-| `maestro-e2e.yml` | After successful `ios-build-cached` | Add/complete/delete/persistence flows pass | `maestro-e2e` artifact (videos + report) |
-| `test-min-repro.yml` | Manual only | Whole stack still works from scratch (scaffolds new app each time) | `ios-min-repro` artifact |
+| Workflow               | Triggers                                | What it asserts                                                          | Where artifacts go                       |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------- |
+| `unit-tests.yml`       | Every push + PR                         | TS compiles, Prettier passes, Jest+coverage thresholds met               | `coverage/` artifact                     |
+| `ios-build-cached.yml` | Push to `master` (src changes) + manual | A real `.app` builds, codesigns, installs, launches, captures screenshot | `ios-build-cached` artifact              |
+| `maestro-e2e.yml`      | After successful `ios-build-cached`     | Add/complete/delete/persistence flows pass                               | `maestro-e2e` artifact (videos + report) |
+| `test-min-repro.yml`   | Manual only                             | Whole stack still works from scratch (scaffolds new app each time)       | `ios-min-repro` artifact                 |
 
 ## Lessons baked into this repo
 

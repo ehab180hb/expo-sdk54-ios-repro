@@ -48,13 +48,13 @@ real AsyncStorage I/O. Move those concerns to E2E.
 `jest.setup.ts` mocks the native modules that don't exist in the test
 runtime:
 
-| Module | Why mocked | Mock behavior |
-|---|---|---|
-| `expo-haptics` | Native bridge | All methods return `Promise.resolve(undefined)` |
-| `@react-native-async-storage/async-storage` | Native bridge | In-memory `Map`-backed implementation |
-| `react-native-unistyles` | Native bridge | Pass-through to RN's StyleSheet |
-| `react-native-gesture-handler` | Native bridge | All wrappers render as plain `View` |
-| `react-native-reanimated` | Native bridge | Library's official `mock` |
+| Module                                      | Why mocked    | Mock behavior                                   |
+| ------------------------------------------- | ------------- | ----------------------------------------------- |
+| `expo-haptics`                              | Native bridge | All methods return `Promise.resolve(undefined)` |
+| `@react-native-async-storage/async-storage` | Native bridge | In-memory `Map`-backed implementation           |
+| `react-native-unistyles`                    | Native bridge | Pass-through to RN's StyleSheet                 |
+| `react-native-gesture-handler`              | Native bridge | All wrappers render as plain `View`             |
+| `react-native-reanimated`                   | Native bridge | Library's official `mock`                       |
 
 If you add a new native module, add its mock here. Otherwise tests fail
 at import time with "TurboModuleRegistry.getEnforcing(...) ... is null".
@@ -123,9 +123,9 @@ in `coveragePathIgnorePatterns`).
 
 ## When to add tests
 
-| Trigger | Test type |
-|---|---|
-| New action in `todoStore.ts` | Unit (`__tests__/store/`) |
-| New component | Component (`__tests__/components/`) |
-| New cross-component flow / gesture / persistence behavior | E2E (`e2e/flows/`) |
-| Bug fix | Whichever layer would have caught it — and that's the test that should fail BEFORE your fix and pass AFTER |
+| Trigger                                                   | Test type                                                                                                  |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| New action in `todoStore.ts`                              | Unit (`__tests__/store/`)                                                                                  |
+| New component                                             | Component (`__tests__/components/`)                                                                        |
+| New cross-component flow / gesture / persistence behavior | E2E (`e2e/flows/`)                                                                                         |
+| Bug fix                                                   | Whichever layer would have caught it — and that's the test that should fail BEFORE your fix and pass AFTER |

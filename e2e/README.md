@@ -4,11 +4,11 @@ End-to-end UI tests written as YAML flows for [Maestro](https://maestro.mobile.d
 
 ## Why E2E exists alongside unit tests
 
-| Layer | What it catches | Cost per run |
-|---|---|---|
-| Jest unit tests (`__tests__/`) | Logic bugs in store/hooks/utils, prop wiring | ~3s |
-| Component tests (`__tests__/components/`) | Render regressions, event handling | ~5s |
-| **Maestro E2E (this dir)** | **Integration bugs across layers, gesture-handler quirks, AsyncStorage round-tripping, real-runtime native module behavior** | ~30s per flow |
+| Layer                                     | What it catches                                                                                                              | Cost per run  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Jest unit tests (`__tests__/`)            | Logic bugs in store/hooks/utils, prop wiring                                                                                 | ~3s           |
+| Component tests (`__tests__/components/`) | Render regressions, event handling                                                                                           | ~5s           |
+| **Maestro E2E (this dir)**                | **Integration bugs across layers, gesture-handler quirks, AsyncStorage round-tripping, real-runtime native module behavior** | ~30s per flow |
 
 E2E doesn't replace unit tests — it covers the gaps unit tests can't see (real
 gestures, real persistence, real navigation between renders). Keep E2E focused
@@ -17,6 +17,7 @@ on user-visible flows; don't replicate unit test coverage here.
 ## Running locally
 
 Prerequisites:
+
 - macOS with Xcode + Maestro installed (`brew install maestro`)
 - A booted iOS simulator
 - The app already installed on the simulator (`npm run ios:release` once)

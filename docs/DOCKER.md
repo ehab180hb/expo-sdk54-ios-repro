@@ -1,8 +1,8 @@
 # Docker / devcontainer
 
-Docker is *not* a path to building iOS apps — Linux containers can't run
+Docker is _not_ a path to building iOS apps — Linux containers can't run
 Xcode or boot iPhone simulators. But Docker is excellent for everything
-*else* in the iteration loop:
+_else_ in the iteration loop:
 
 - TypeScript type checking
 - Jest unit tests
@@ -72,14 +72,14 @@ When `package-lock.json` doesn't change, layer 1 is a cache hit
 
 ## What you can do inside the container
 
-| Task | Command | Time |
-|---|---|---|
-| Type check | `npm run typecheck` | ~3s |
-| Run all unit tests | `npm test` | ~3s |
-| Jest watch | `npm run test:watch` | ~1s per change |
-| Coverage report | `npm run test:coverage` | ~5s |
-| Lint format | `npm run format` | ~1s |
-| Bundle JS for a remote sim | `npx expo export:embed --platform ios --bundle-output /shared/main.jsbundle` | ~30s |
+| Task                       | Command                                                                      | Time           |
+| -------------------------- | ---------------------------------------------------------------------------- | -------------- |
+| Type check                 | `npm run typecheck`                                                          | ~3s            |
+| Run all unit tests         | `npm test`                                                                   | ~3s            |
+| Jest watch                 | `npm run test:watch`                                                         | ~1s per change |
+| Coverage report            | `npm run test:coverage`                                                      | ~5s            |
+| Lint format                | `npm run format`                                                             | ~1s            |
+| Bundle JS for a remote sim | `npx expo export:embed --platform ios --bundle-output /shared/main.jsbundle` | ~30s           |
 
 ## What you CAN'T do inside the container
 

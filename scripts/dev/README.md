@@ -3,11 +3,11 @@
 Companion scripts for the iteration loop documented in
 [`docs/ITERATION_LOOP.md`](../../docs/ITERATION_LOOP.md).
 
-| Script | What it does | Cycle time |
-|---|---|---|
-| `dev.sh` | Spawn Jest watch + Metro + sim log tail in tmux panes | continuous |
-| `swap-jsbundle.sh` | Bundle JS only, inject into existing .app, re-install on sim | ~60s |
-| `selftest.sh` | Run all local quality gates (format/types/tests/coverage), bail on first fail | ~12s |
+| Script             | What it does                                                                  | Cycle time |
+| ------------------ | ----------------------------------------------------------------------------- | ---------- |
+| `dev.sh`           | Spawn Jest watch + Metro + sim log tail in tmux panes                         | continuous |
+| `swap-jsbundle.sh` | Bundle JS only, inject into existing .app, re-install on sim                  | ~60s       |
+| `selftest.sh`      | Run all local quality gates (format/types/tests/coverage), bail on first fail | ~12s       |
 
 ## Usage examples
 

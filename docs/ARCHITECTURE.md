@@ -44,12 +44,12 @@ Components, hooks, screens, utils, types — all pure.
 
 Why zustand and not Redux Toolkit / Context+useReducer / Jotai:
 
-| Option | Why rejected |
-|---|---|
-| Redux Toolkit | Boilerplate-heavy for an app with 5 actions. RTK shines at scale; this isn't scale. |
-| Context + useReducer | No persistence story. Re-render storms on context changes. |
-| Jotai / Recoil | Overkill atomic state model for a flat list of todos. |
-| **zustand** | 2KB, built-in `persist` middleware, hooks API matches RN ergonomics, zero ceremony |
+| Option               | Why rejected                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| Redux Toolkit        | Boilerplate-heavy for an app with 5 actions. RTK shines at scale; this isn't scale. |
+| Context + useReducer | No persistence story. Re-render storms on context changes.                          |
+| Jotai / Recoil       | Overkill atomic state model for a flat list of todos.                               |
+| **zustand**          | 2KB, built-in `persist` middleware, hooks API matches RN ergonomics, zero ceremony  |
 
 Selectors are encouraged: `useTodoStore((s) => s.todos)` triggers re-render
 only when `todos` changes, not on every other field's mutation.
@@ -73,12 +73,12 @@ incompatibly, bump to `v2` and add a migration in the persist config.
 
 Why unistyles and not StyleSheet / Tamagui / NativeWind:
 
-| Option | Why rejected |
-|---|---|
-| Plain RN StyleSheet | No theme awareness — every component would need props for colors |
-| Tamagui | 100s of KB and complex setup for what we need |
-| NativeWind | Tailwind syntax, but adds a class-name compiler we don't want |
-| **unistyles** | Theme as first-class arg to `StyleSheet.create`, dark/light auto-switch, runtime-cheap |
+| Option              | Why rejected                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| Plain RN StyleSheet | No theme awareness — every component would need props for colors                       |
+| Tamagui             | 100s of KB and complex setup for what we need                                          |
+| NativeWind          | Tailwind syntax, but adds a class-name compiler we don't want                          |
+| **unistyles**       | Theme as first-class arg to `StyleSheet.create`, dark/light auto-switch, runtime-cheap |
 
 `src/theme/tokens.ts` defines `lightTheme` / `darkTheme` as const objects.
 `src/theme/unistyles.ts` registers them via `StyleSheet.configure(...)`.
@@ -86,7 +86,7 @@ Every component then writes:
 
 ```tsx
 const styles = StyleSheet.create((theme) => ({
-  button: { backgroundColor: theme.colors.accent }
+  button: { backgroundColor: theme.colors.accent },
 }));
 ```
 

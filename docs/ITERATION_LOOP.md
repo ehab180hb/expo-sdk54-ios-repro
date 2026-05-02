@@ -1,7 +1,7 @@
 # Iteration loop — toward near-zero-second debug time
 
-The single biggest predictor of debug velocity is *cycle time of the
-cheapest test that can catch the bug*. A 2-minute xcodebuild is
+The single biggest predictor of debug velocity is _cycle time of the
+cheapest test that can catch the bug_. A 2-minute xcodebuild is
 appropriate for testing native module integration; running it for a
 typo in store logic is malpractice.
 
@@ -11,15 +11,15 @@ bug class you're hunting.
 
 ## TL;DR — the speed table
 
-| Layer | Cycle time | Catches | Tool | When to use |
-|---|---|---|---|---|
-| **0. Type check** | ~1s | Type errors, missing imports, wrong shape | `tsc --noEmit` (editor) | Continuously, in editor |
-| **1. Jest watch (logic)** | **~1-3s** | Logic bugs in store / hooks / utils | `npm run test:watch` | Every store/util/hook change |
-| **2. Component tests** | ~3-5s | Render bugs, prop wiring, event handling | testing-library/react-native (Jest) | Every component change |
-| **3. Metro hot reload** | ~500ms (after first build) | Visual bugs, layout, runtime UI behavior | `npm run ios` then save files | UI iteration once app is running |
-| **4. Maestro local watch** | ~10-30s per flow | Gestures, persistence, cross-component flows | `maestro test --watch e2e/flows/foo.yaml` | E2E flow iteration |
-| **5. Cached CI sim build** | ~3-5min warm, 12min cold | Native module integration, build config | `ios-build-cached.yml` workflow | When local Mac unavailable, native side change |
-| **6. Bundle-only fast path** | ~60-90s | JS-only changes against a cached `.app` | `js-only-fast.yml` workflow (proposed) | JS change after a successful build |
+| Layer                        | Cycle time                 | Catches                                      | Tool                                      | When to use                                    |
+| ---------------------------- | -------------------------- | -------------------------------------------- | ----------------------------------------- | ---------------------------------------------- |
+| **0. Type check**            | ~1s                        | Type errors, missing imports, wrong shape    | `tsc --noEmit` (editor)                   | Continuously, in editor                        |
+| **1. Jest watch (logic)**    | **~1-3s**                  | Logic bugs in store / hooks / utils          | `npm run test:watch`                      | Every store/util/hook change                   |
+| **2. Component tests**       | ~3-5s                      | Render bugs, prop wiring, event handling     | testing-library/react-native (Jest)       | Every component change                         |
+| **3. Metro hot reload**      | ~500ms (after first build) | Visual bugs, layout, runtime UI behavior     | `npm run ios` then save files             | UI iteration once app is running               |
+| **4. Maestro local watch**   | ~10-30s per flow           | Gestures, persistence, cross-component flows | `maestro test --watch e2e/flows/foo.yaml` | E2E flow iteration                             |
+| **5. Cached CI sim build**   | ~3-5min warm, 12min cold   | Native module integration, build config      | `ios-build-cached.yml` workflow           | When local Mac unavailable, native side change |
+| **6. Bundle-only fast path** | ~60-90s                    | JS-only changes against a cached `.app`      | `js-only-fast.yml` workflow (proposed)    | JS change after a successful build             |
 
 ## Layer 0: TypeScript in your editor (continuous)
 
@@ -28,6 +28,7 @@ VS Code with the TypeScript extension shows errors as you type. The
 stay short.
 
 `tsconfig.json` strict flags catch ~30% of bugs at edit time:
+
 - `strict: true`
 - `noUncheckedIndexedAccess: true` (forces `array[i]` to be `T | undefined`)
 - `noImplicitOverride: true`
@@ -99,6 +100,7 @@ The app stays installed; only the flow re-executes.
 ## Layer 5: Cached CI sim build (3-5 min warm)
 
 The `ios-build-cached.yml` workflow uses `actions/cache@v4` for:
+
 - `node_modules` (npm cache)
 - `ios/Pods`
 - `ios/derived` (Xcode DerivedData)
@@ -120,7 +122,7 @@ For JS-only iteration in CI without rebuilding the entire `.app`:
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['src/**', 'App.tsx', 'index.ts']  # only JS changes
+    paths: ['src/**', 'App.tsx', 'index.ts'] # only JS changes
 
 steps:
   - uses: actions/checkout@v4
@@ -209,12 +211,12 @@ Pre-merge regression check?
 
 Assuming each PR runs unit-tests + ios-build-cached + maestro-e2e:
 
-| Layer | Per-PR cost | Per-PR time | 50 PR/week cost |
-|---|---|---|---|
-| Unit tests (Linux) | $0 (free unlimited public) | 30s | $0 |
-| iOS build cached | $0 (free public) | 4min warm | $0 |
-| Maestro E2E | $0 (free public) | 6min | $0 |
-| Self-hosted | $0 (one-time HW) | 30s | $0 |
+| Layer              | Per-PR cost                | Per-PR time | 50 PR/week cost |
+| ------------------ | -------------------------- | ----------- | --------------- |
+| Unit tests (Linux) | $0 (free unlimited public) | 30s         | $0              |
+| iOS build cached   | $0 (free public)           | 4min warm   | $0              |
+| Maestro E2E        | $0 (free public)           | 6min        | $0              |
+| Self-hosted        | $0 (one-time HW)           | 30s         | $0              |
 
 Public repos benefit from GitHub's unlimited free macOS minutes. Total
 weekly CI cost: $0. Total developer wall-clock per PR: under 5 minutes
