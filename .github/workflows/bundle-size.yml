@@ -1,0 +1,117 @@
+name: Bundle size + composition
+
+# Plan 4 T4.3.B + T4.3.C. On every PR: bundle the JS, compare size
+# against master's bundle, and post a PR comment with the delta and
+# top contributing modules.
+#
+# Catches the "I added one icon library and the bundle grew 500KB"
+# class of regression. Doesn't fail the PR by default — surfacing
+# the signal is enough; combine with manual review.
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'App.tsx'
+      - 'index.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'babel.config.js'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bundle-size-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need master's HEAD to compare
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm install --legacy-peer-deps
+
+      - name: Bundle PR HEAD
+        env:
+          BUNDLE_OUT_DIR: bundle-pr
+        run: bash scripts/dev/bundle-composition.sh --json > /tmp/pr-meta.json
+        continue-on-error: false
+
+      - name: Bundle master baseline
+        env:
+          BUNDLE_OUT_DIR: bundle-base
+        run: |
+          # Snapshot the PR's bundle so it doesn't get clobbered.
+          cp bundle-pr/main.jsbundle /tmp/pr.jsbundle 2>/dev/null || true
+          # Check out master's tree (without changing the workspace
+          # state Git tracks) and bundle from there.
+          git fetch origin master
+          MASTER_SHA=$(git rev-parse origin/master)
+          # Create a worktree to keep the PR checkout intact
+          git worktree add /tmp/master-tree "$MASTER_SHA"
+          ( cd /tmp/master-tree && npm install --legacy-peer-deps && \
+            BUNDLE_OUT_DIR=bundle-base bash scripts/dev/bundle-composition.sh --json > /tmp/base-meta.json )
+          # advisory: worktree remove may fail if the dir is locked; harmless either way.
+          git worktree remove --force /tmp/master-tree \
+            || true # advisory: see step comment
+
+      - name: Compute delta + post PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          PR_BYTES=$(jq '.bytes' /tmp/pr-meta.json)
+          BASE_BYTES=$(jq '.bytes' /tmp/base-meta.json)
+          DELTA=$((PR_BYTES - BASE_BYTES))
+          PR_HUMAN=$(jq -r '.human' /tmp/pr-meta.json)
+          BASE_HUMAN=$(jq -r '.human' /tmp/base-meta.json)
+          PCT=$(awk "BEGIN { if ($BASE_BYTES > 0) printf \"%.2f\", ($DELTA / $BASE_BYTES) * 100; else print \"n/a\" }")
+
+          # Top contributors (parse PR's bundle composition)
+          BUNDLE_OUT_DIR=bundle-pr bash scripts/dev/bundle-composition.sh --top 15 \
+            > /tmp/composition.txt
+
+          BODY=$(cat <<EOF
+          <!-- bundle-size -->
+          📦 **Bundle size**
+
+          | | bytes | human |
+          | --- | --- | --- |
+          | this PR | ${PR_BYTES} | ${PR_HUMAN} |
+          | master  | ${BASE_BYTES} | ${BASE_HUMAN} |
+          | delta   | ${DELTA} | ${PCT}% |
+
+          <details><summary>Top contributors (PR HEAD)</summary>
+
+          \`\`\`
+          $(cat /tmp/composition.txt)
+          \`\`\`
+
+          </details>
+
+          (Auto-issued by .github/workflows/bundle-size.yml — Plan 4 T4.3.B + T4.3.C)
+          EOF
+          )
+
+          # Replace previous bot comment if present, else create.
+          existing=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+                     --jq '.[] | select(.body | contains("<!-- bundle-size -->")) | .id' | head -1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/${existing}" \
+              -f body="$BODY" >/dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body "$BODY"
+          fi

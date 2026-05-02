@@ -12,8 +12,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { parseLink } from '@/lib/linking';
+import { markLaunch } from '@/lib/perf';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { useTodoStore } from '@/store/todoStore';
+
+// Plan 4 T4.3.E: capture launch time as early as possible.
+markLaunch();
 
 // Apply a deep-link route to the app state. Deliberately minimal —
 // no destructive actions; see src/lib/linking.ts for the route map.
