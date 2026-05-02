@@ -31,6 +31,9 @@ jobs:
       - name: Install JS deps
         run: npm install --legacy-peer-deps
 
+      # NOTE: cache key shapes MUST match ios-build-cached.yml exactly,
+      # otherwise restore-keys will hit the wrong layer (or no layer)
+      # and we'll do a full cold rebuild here instead of restoring.
       - name: Restore CocoaPods cache
         uses: actions/cache@v4
         with:
@@ -38,15 +41,27 @@ jobs:
             ios/Pods
             ~/Library/Caches/CocoaPods
             ~/.cocoapods
-          key: ${{ runner.os }}-pods-${{ hashFiles('package-lock.json', 'app.json') }}
-          restore-keys: ${{ runner.os }}-pods-
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-${{ hashFiles('package-lock.json') }}-
+            ${{ runner.os }}-pods-
 
       - name: Restore DerivedData cache
         uses: actions/cache@v4
         with:
           path: ios/derived
-          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'src/**') }}
-          restore-keys: ${{ runner.os }}-derived-
+          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js', 'ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json') }}-
+            ${{ runner.os }}-derived-
+
+      - name: Restore .expo cache
+        uses: actions/cache@v4
+        with:
+          path: .expo
+          key: ${{ runner.os }}-expo-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-expo-
 
       - name: Build (incremental from cache)
         run: |

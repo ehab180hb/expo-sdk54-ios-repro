@@ -1,32 +1,17 @@
 #!/usr/bin/env bash
-# selftest.sh — runs the full local quality gate, fastest layer first.
-# Bails on the first failure so you don't wait through expensive layers
-# when a cheap one already failed.
+# selftest = run the same gates as the pre-push git hook.
 #
-# Order:
-#   1. Prettier --check  (~1s)
-#   2. TypeScript        (~3s)
-#   3. Jest              (~3s)
-#   4. Coverage          (~5s)
+# Single source of truth: lefthook.yml. This script is a thin wrapper
+# so `bash scripts/dev/selftest.sh` and `git push` exercise identical
+# checks (no drift between local script and what blocks pushes).
 #
-# To run E2E in addition, append:
-#   bash scripts/dev/selftest.sh && maestro test e2e/flows/
+# Stages (defined in lefthook.yml under pre-push):
+#   1. coverage (npm run test:coverage)
+#   2. expo-doctor (assets + version-matrix validation)
+#   3. actionlint (workflow YAML lint)
+#
+# Exits non-zero on the first failure.
 
 set -euo pipefail
-
 cd "$(dirname "$0")/../.."
-
-echo "==> [1/4] format check"
-npm run format:check
-
-echo "==> [2/4] typecheck"
-npm run typecheck
-
-echo "==> [3/4] tests"
-npm test -- --silent
-
-echo "==> [4/4] coverage thresholds"
-npm run test:coverage -- --silent
-
-echo ""
-echo "✓ all local checks passed in ${SECONDS}s"
+exec npx lefthook run pre-push

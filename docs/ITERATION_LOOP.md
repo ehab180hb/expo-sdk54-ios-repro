@@ -5,21 +5,46 @@ cheapest test that can catch the bug_. A 2-minute xcodebuild is
 appropriate for testing native module integration; running it for a
 typo in store logic is malpractice.
 
-This doc describes a 7-layer iteration toolkit, ordered by speed. Each
+This doc describes an 8-layer iteration toolkit, ordered by speed. Each
 layer is wired in this repo. Pick the cheapest one that can catch the
 bug class you're hunting.
 
 ## TL;DR — the speed table
 
-| Layer                        | Cycle time                 | Catches                                      | Tool                                      | When to use                                    |
-| ---------------------------- | -------------------------- | -------------------------------------------- | ----------------------------------------- | ---------------------------------------------- |
-| **0. Type check**            | ~1s                        | Type errors, missing imports, wrong shape    | `tsc --noEmit` (editor)                   | Continuously, in editor                        |
-| **1. Jest watch (logic)**    | **~1-3s**                  | Logic bugs in store / hooks / utils          | `npm run test:watch`                      | Every store/util/hook change                   |
-| **2. Component tests**       | ~3-5s                      | Render bugs, prop wiring, event handling     | testing-library/react-native (Jest)       | Every component change                         |
-| **3. Metro hot reload**      | ~500ms (after first build) | Visual bugs, layout, runtime UI behavior     | `npm run ios` then save files             | UI iteration once app is running               |
-| **4. Maestro local watch**   | ~10-30s per flow           | Gestures, persistence, cross-component flows | `maestro test --watch e2e/flows/foo.yaml` | E2E flow iteration                             |
-| **5. Cached CI sim build**   | ~3-5min warm, 12min cold   | Native module integration, build config      | `ios-build-cached.yml` workflow           | When local Mac unavailable, native side change |
-| **6. Bundle-only fast path** | ~60-90s                    | JS-only changes against a cached `.app`      | `js-only-fast.yml` workflow (proposed)    | JS change after a successful build             |
+| Layer                        | Cycle time                 | Catches                                               | Tool                                      | When to use                                    |
+| ---------------------------- | -------------------------- | ----------------------------------------------------- | ----------------------------------------- | ---------------------------------------------- |
+| **0. Type check**            | ~1s                        | Type errors, missing imports, wrong shape             | `tsc --noEmit` (editor)                   | Continuously, in editor                        |
+| **0.5. Pre-commit hooks**    | **~3-5s on commit**        | Format / TS / Jest on staged files; auto-fix prettier | `lefthook` (`lefthook.yml`)               | Every `git commit` — automatic                 |
+| **0.6. Pre-push hooks**      | **~10-20s on push**        | Coverage gate, asset paths, dep matrix, workflow lint | `lefthook` (`lefthook.yml`)               | Every `git push` — automatic                   |
+| **1. Jest watch (logic)**    | **~1-3s**                  | Logic bugs in store / hooks / utils                   | `npm run test:watch`                      | Every store/util/hook change                   |
+| **2. Component tests**       | ~3-5s                      | Render bugs, prop wiring, event handling              | testing-library/react-native (Jest)       | Every component change                         |
+| **3. Metro hot reload**      | ~500ms (after first build) | Visual bugs, layout, runtime UI behavior              | `npm run ios` then save files             | UI iteration once app is running               |
+| **4. Maestro local watch**   | ~10-30s per flow           | Gestures, persistence, cross-component flows          | `maestro test --watch e2e/flows/foo.yaml` | E2E flow iteration                             |
+| **5. Cached CI sim build**   | ~3-5min warm, 12min cold   | Native module integration, build config               | `ios-build-cached.yml` workflow           | When local Mac unavailable, native side change |
+| **6. Bundle-only fast path** | ~60-90s                    | JS-only changes against a cached `.app`               | `js-only-fast.yml` workflow               | JS change after a successful build             |
+
+## Layer 0.5 + 0.6: Pre-commit / pre-push hooks (lefthook)
+
+The cheapest test for the largest class of bugs. Designed against the
+13 CI iterations that built this very app — ~10 of them were preventable
+locally in <5 seconds.
+
+`lefthook.yml` defines two stages:
+
+| Stage      | Runs                                                               | Iteration it catches                                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| pre-commit | prettier --write (auto-fix), tsc --noEmit, jest --findRelatedTests | TS errors, formatting, broken tests on the file you just edited                                                                                                          |
+| pre-push   | full coverage gate, expo-doctor, actionlint                        | Coverage threshold, missing asset paths in `app.json`, off-Expo-matrix dep versions (e.g. `react-native-safe-area-context@5.0.0` vs RN 0.81), workflow YAML masking-bugs |
+
+Hooks install automatically via `npm install` (the `prepare` script
+runs `lefthook install`). Skip in emergencies with `LEFTHOOK=0 git commit`.
+
+Run the same gates manually any time:
+
+```bash
+bash scripts/dev/selftest.sh        # = pre-push (coverage + doctor + actionlint)
+npx lefthook run pre-commit         # = format + typecheck + jest on staged
+```
 
 ## Layer 0: TypeScript in your editor (continuous)
 

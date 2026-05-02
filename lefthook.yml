@@ -1,0 +1,57 @@
+# Lefthook config — early-detection layer for the 13 iteration cycles
+# we just spent making the TodoMVC app green. Each gate below maps to
+# a specific iteration that wasted CI minutes.
+#
+# Goal: fail in <5s on `git commit` instead of 30s+ in CI.
+# See docs/ITERATION_LOOP.md "Layer 0" for the full rationale.
+#
+# Run hooks manually: `npx lefthook run pre-commit` / `pre-push`
+# Skip a hook: `LEFTHOOK=0 git commit ...` (only for emergency)
+
+pre-commit:
+  parallel: true # format / typecheck / tests run concurrently
+  commands:
+    format:
+      # Prettier auto-fixes and re-stages — never blocks on whitespace.
+      # Catches iters #3 and #7.
+      glob: '*.{ts,tsx,js,json,md,yml,yaml}'
+      run: npx prettier --write {staged_files}
+      stage_fixed: true
+
+    typecheck:
+      # Full project tsc. tsconfig.json already excludes jest.setup.ts
+      # so iter #9 (noImplicitAny in test mocks) doesn't fire here.
+      # Catches iter #2 (unistyles type bug).
+      glob: '*.{ts,tsx}'
+      run: npx tsc --noEmit
+
+    tests:
+      # --findRelatedTests scopes Jest to only files affected by the
+      # staged change — usually 1-3 tests in 1-2s. Catches iters
+      # #4 (jest config validation), #5 (unistyles mock fn-form),
+      # #6 (Swipeable mock missing renderRightActions), #8 (jest-hoist
+      # closure rejection).
+      glob: '{src,__tests__}/**/*.{ts,tsx}'
+      run: npx jest --bail --findRelatedTests {staged_files} --passWithNoTests
+
+pre-push:
+  parallel: false # cheapest first so we fail fast
+  commands:
+    coverage:
+      # Full coverage gate. ~5s with cached jest results.
+      # Catches iter #10 (threshold gate).
+      run: npm run test:coverage -- --silent
+
+    expo-doctor:
+      # Validates app.json paths exist + dep versions match Expo's
+      # SDK matrix. Catches iters #11 (missing assets/icon.png) and
+      # #13 (rn-safe-area-context off-matrix).
+      run: npx --yes expo-doctor
+
+    actionlint:
+      # Lints workflow YAML for shell-script bugs (e.g.
+      # `tee | grep ... || true` masking). Catches the **Bonus**
+      # iteration where xcodebuild's BUILD FAILED was silently
+      # swallowed by the pipeline.
+      glob: '.github/workflows/*.{yml,yaml}'
+      run: npx --yes actionlint-cli2

@@ -13,15 +13,17 @@ name: iOS Sim Build (cached)
 on:
   push:
     branches: [master]
+    # NATIVE-config inputs only. JS edits go through js-only-fast.yml
+    # (which restores the .app from this workflow's cache and only
+    # re-bundles the JS — ~90s vs ~5min). src/**, index.ts, App.tsx
+    # are deliberately NOT in this list.
     paths:
       - 'package.json'
       - 'package-lock.json'
       - 'app.json'
       - 'babel.config.js'
       - 'tsconfig.json'
-      - 'src/**'
-      - 'index.ts'
-      - 'App.tsx'
+      - 'ios/Podfile.lock'
       - '.github/workflows/ios-build-cached.yml'
   workflow_dispatch:
     inputs:
@@ -57,17 +59,36 @@ jobs:
             ios/Pods
             ~/Library/Caches/CocoaPods
             ~/.cocoapods
-          key: ${{ runner.os }}-pods-${{ hashFiles('package-lock.json', 'app.json') }}
+          # Hash on Podfile.lock (the actual native dep manifest) +
+          # package-lock.json (for cases when Podfile.lock isn't present
+          # yet on a fresh clone). app.json was a poor signal because
+          # whitespace edits would bust an otherwise-valid Pods cache.
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock', 'package-lock.json') }}
           restore-keys: |
+            ${{ runner.os }}-pods-${{ hashFiles('package-lock.json') }}-
             ${{ runner.os }}-pods-
 
       - name: Cache Xcode DerivedData
         uses: actions/cache@v4
         with:
           path: ios/derived
-          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'src/**') }}
+          # CRITICAL: do NOT include src/** here — every JS edit would
+          # blow this cache, defeating the point. The app's binary is
+          # stable as long as native config is. JS changes flow through
+          # js-only-fast.yml's bundle-only path.
+          key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js', 'ios/Podfile.lock') }}
           restore-keys: |
+            ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json') }}-
             ${{ runner.os }}-derived-
+
+      - name: Cache .expo
+        uses: actions/cache@v4
+        with:
+          path: .expo
+          # Saves ~10-15s per run on the prebuild artifact regen.
+          key: ${{ runner.os }}-expo-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-expo-
 
       - name: Expo prebuild + pod install
         run: |
