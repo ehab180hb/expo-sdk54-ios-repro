@@ -64,7 +64,7 @@ jobs:
 
       - name: Add suspect deps + babel plugin
         run: |
-          cd /tmp/mondid-min
+          cd /private/tmp/mondid-min
           # The exact same flagging dep set from mondid-finance-mobile.
           npm install --legacy-peer-deps \
             react-native-unistyles@~3.2 \
@@ -129,14 +129,14 @@ jobs:
 
       - name: Expo prebuild iOS + pod install
         run: |
-          cd /tmp/mondid-min
+          cd /private/tmp/mondid-min
           npx expo prebuild --platform ios --no-install
           cd ios
           pod install --repo-update 2>&1 | tee pod-install.log | tail -50
 
       - name: Xcodebuild Release (embeds JS bundle so we exercise the dep stack without Metro)
         run: |
-          cd /tmp/mondid-min/ios
+          cd /private/tmp/mondid-min/ios
           set -o pipefail
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
           # Schemes are listed alphabetically by xcodebuild -list, and the
@@ -200,7 +200,7 @@ jobs:
 
       - name: Inspect built .app
         run: |
-          cd /tmp/mondid-min/ios
+          cd /private/tmp/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "APP=$APP"
           echo "--- top-level ---"
@@ -215,7 +215,7 @@ jobs:
 
       - name: Codesign .app (ad-hoc, required for simctl install on Xcode 16)
         run: |
-          cd /tmp/mondid-min/ios
+          cd /private/tmp/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "Codesigning $APP"
           # Sign the main app deeply (covers Frameworks/* automatically).
@@ -225,7 +225,7 @@ jobs:
 
       - name: Install + launch + capture logs
         run: |
-          cd /tmp/mondid-min/ios
+          cd /private/tmp/mondid-min/ios
           APP=$(find derived -name "*.app" -type d -maxdepth 8 | head -1)
           echo "Installing $APP onto $DEVICE"
           xcrun simctl install "$DEVICE" "$APP"
