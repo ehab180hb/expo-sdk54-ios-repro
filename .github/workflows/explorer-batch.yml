@@ -34,9 +34,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -46,7 +46,7 @@ jobs:
 
       - name: Restore pre-built .app from cache
         id: app-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: pre-built-app/
           key: pre-built-app-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js') }}
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload batch artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: explorer-batch-${{ github.run_id }}
           path: artifacts/
