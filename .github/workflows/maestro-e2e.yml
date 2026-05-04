@@ -21,9 +21,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -35,7 +35,7 @@ jobs:
       # otherwise restore-keys will hit the wrong layer (or no layer)
       # and we'll do a full cold rebuild here instead of restoring.
       - name: Restore CocoaPods cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ios/Pods
@@ -47,7 +47,7 @@ jobs:
             ${{ runner.os }}-pods-
 
       - name: Restore DerivedData cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ios/derived
           key: ${{ runner.os }}-derived-${{ hashFiles('package-lock.json', 'app.json', 'babel.config.js', 'ios/Podfile.lock') }}
@@ -56,7 +56,7 @@ jobs:
             ${{ runner.os }}-derived-
 
       - name: Restore .expo cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .expo
           key: ${{ runner.os }}-expo-${{ hashFiles('package-lock.json', 'app.json') }}
@@ -143,7 +143,7 @@ jobs:
 
       - name: Upload report + recordings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maestro-e2e
           path: |
